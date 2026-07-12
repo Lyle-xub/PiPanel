@@ -1,0 +1,60 @@
+name: AnyPiP
+options:
+  bundleIdPrefix: com.anypip
+  deploymentTarget:
+    macOS: "14.0"
+  createIntermediateGroups: true
+settings:
+  base:
+    SWIFT_VERSION: "5.0"
+    MARKETING_VERSION: "0.1.0"
+    CURRENT_PROJECT_VERSION: "1"
+    DEVELOPMENT_TEAM: ""
+    CODE_SIGN_STYLE: Automatic
+    ENABLE_HARDENED_RUNTIME: YES
+    MACOSX_DEPLOYMENT_TARGET: "14.0"
+
+targets:
+  AnyPiP:
+    type: application
+    platform: macOS
+    sources:
+      - path: AnyPiP
+        excludes:
+          - "**/Info.plist"
+          - "**/*.entitlements"
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: com.anypip.mac
+        PRODUCT_NAME: AnyPiP
+        INFOPLIST_FILE: AnyPiP/App/Info.plist
+        CODE_SIGN_ENTITLEMENTS: AnyPiP/App/AnyPiP.entitlements
+        ASSETCATALOG_COMPILER_APPICON_NAME: AppIcon
+        GENERATE_INFOPLIST_FILE: NO
+        SWIFT_EMIT_LOC_STRINGS: NO
+        SWIFT_OBJC_BRIDGING_HEADER: AnyPiP/Support/CGVirtualDisplayPrivate.h
+
+  AnyPiPTests:
+    type: bundle.unit-test
+    platform: macOS
+    sources:
+      - path: AnyPiPTests
+    dependencies:
+      - target: AnyPiP
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: com.anypip.mac.tests
+        GENERATE_INFOPLIST_FILE: YES
+
+schemes:
+  AnyPiP:
+    build:
+      targets:
+        AnyPiP: all
+        AnyPiPTests: [test]
+    run:
+      config: Debug
+    test:
+      config: Debug
+      targets:
+        - AnyPiPTests

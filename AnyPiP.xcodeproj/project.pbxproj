@@ -1,0 +1,604 @@
+// !$*UTF8*$!
+{
+	archiveVersion = 1;
+	classes = {
+	};
+	objectVersion = 77;
+	objects = {
+
+/* Begin PBXBuildFile section */
+		03D706D218E6A30045D2A69B /* AXWindowLocator.swift in Sources */ = {isa = PBXBuildFile; fileRef = 177618AEF31396EF5CB134C2 /* AXWindowLocator.swift */; };
+		05B178D84B211B2350831E48 /* SettingsStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = 8997FA67671E7220BA217455 /* SettingsStore.swift */; };
+		0C3CEF9EDC6CCB86CCA649FE /* Assets.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = 2F7BBCDC7353B19CAC996931 /* Assets.xcassets */; };
+		3881F7F8274DA41974C0662B /* WindowEnumerator.swift in Sources */ = {isa = PBXBuildFile; fileRef = 8CAE614A41CE4FA9DB6AF4B6 /* WindowEnumerator.swift */; };
+		3F43F40D9F1FE46BBD79909C /* CoordinateTranslator.swift in Sources */ = {isa = PBXBuildFile; fileRef = 209C4453450CE4A5E6FE6B43 /* CoordinateTranslator.swift */; };
+		448C5377F80257810B863B16 /* WindowPickerView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 91568B2AE4ED0E41C6F67E04 /* WindowPickerView.swift */; };
+		4676C80D6001CB236C80DE76 /* AnyPiPApp.swift in Sources */ = {isa = PBXBuildFile; fileRef = F72EF34E47C55CB1E494FC70 /* AnyPiPApp.swift */; };
+		49CDDD041C8B5DD59AC56100 /* AppDelegate.swift in Sources */ = {isa = PBXBuildFile; fileRef = 822D1C8A3B37F85F0A052856 /* AppDelegate.swift */; };
+		4E8DABECE5CE2A754F85DF19 /* SettingsView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 55CAE6E37899A84E440C27FF /* SettingsView.swift */; };
+		4F488F2C62C79F0A5E82CD6F /* MouseEventForwarder.swift in Sources */ = {isa = PBXBuildFile; fileRef = 6FD44A8280502CC0ED58E544 /* MouseEventForwarder.swift */; };
+		50D0E625646EFB221EE819BF /* VirtualDisplayHost.swift in Sources */ = {isa = PBXBuildFile; fileRef = 2044EE1700660560E1FA12D5 /* VirtualDisplayHost.swift */; };
+		5AC23A88C5C54D6E16C9E275 /* PiPSessionManager.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1E6F069E8501980D6195C4B8 /* PiPSessionManager.swift */; };
+		60E6A5C5AD8DCF52BC783D42 /* PiPVideoLayerView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4958D12FC3CBE3BFB04337F1 /* PiPVideoLayerView.swift */; };
+		78B28B0FEE9C19C6355E5F69 /* AnyPiPLogger.swift in Sources */ = {isa = PBXBuildFile; fileRef = 081205821E98F1C145B46195 /* AnyPiPLogger.swift */; };
+		7D532E317EB4B68106DD1DA3 /* KeyboardEventForwarder.swift in Sources */ = {isa = PBXBuildFile; fileRef = 183D7565812B565C700D16CC /* KeyboardEventForwarder.swift */; };
+		881A9FF59B4B0E69C4CF3A43 /* WindowInfo.swift in Sources */ = {isa = PBXBuildFile; fileRef = 05B0A6CE565B6DFF7EB0C927 /* WindowInfo.swift */; };
+		8BEBC3809CE88D7576271C83 /* PermissionsManager.swift in Sources */ = {isa = PBXBuildFile; fileRef = 48C3157FA10EA330CB53BEA6 /* PermissionsManager.swift */; };
+		8E50C8866F25C1CEA2AA5D95 /* VirtualDisplayCoordinator.swift in Sources */ = {isa = PBXBuildFile; fileRef = 28FE44A7A0AAD50095BB10AE /* VirtualDisplayCoordinator.swift */; };
+		929002D5D1088EE1F6694195 /* ActiveSessionsView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 9A657C5C59DD658F12B6976B /* ActiveSessionsView.swift */; };
+		9C07AD358E16A6646D6E429E /* InteractionForwarder.swift in Sources */ = {isa = PBXBuildFile; fileRef = 6D93350F4F26AADCE9E0CD9E /* InteractionForwarder.swift */; };
+		AC6D6D387732CB10C6D3EBC1 /* PiPPanelController.swift in Sources */ = {isa = PBXBuildFile; fileRef = 199FF17DF1AE5A7A61B4B1AF /* PiPPanelController.swift */; };
+		BCCD395E90A1E402A0F8A77A /* CoordinateTranslatorTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = A9E39D95ADF425CDC98B1416 /* CoordinateTranslatorTests.swift */; };
+		D3F30B8C8A562AB732845F0D /* PiPSession.swift in Sources */ = {isa = PBXBuildFile; fileRef = C7F6213E0A7FF4839A5B1935 /* PiPSession.swift */; };
+		D4811025A1F6F8DB6BC16442 /* MenuBarRootView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1677258C34B4431B429D51C6 /* MenuBarRootView.swift */; };
+		FB6AE5F9D904F04C0006A366 /* CaptureSession.swift in Sources */ = {isa = PBXBuildFile; fileRef = F40F72E2EADDC31A21647A44 /* CaptureSession.swift */; };
+		012A2FA530B744548AF1C061 /* WindowFlingDetector.swift in Sources */ = {isa = PBXBuildFile; fileRef = 157725739E1865BCF250E55F /* WindowFlingDetector.swift */; };
+		49FE0522BCC4D74290E4E4E1 /* MenuBarStyles.swift in Sources */ = {isa = PBXBuildFile; fileRef = 632BDED0CEF214ED6759B11D /* MenuBarStyles.swift */; };
+		A5B0FF088DE45B5955B52AB7 /* CloseDropZoneOverlay.swift in Sources */ = {isa = PBXBuildFile; fileRef = AF971938607C4669700A7070 /* CloseDropZoneOverlay.swift */; };
+/* End PBXBuildFile section */
+
+/* Begin PBXContainerItemProxy section */
+		E277008A563D5D605A2EF71A /* PBXContainerItemProxy */ = {
+			isa = PBXContainerItemProxy;
+			containerPortal = D9B9456DAD08F7242F0D558D /* Project object */;
+			proxyType = 1;
+			remoteGlobalIDString = 0C4119CE78E8993B3C89E7A8;
+			remoteInfo = AnyPiP;
+		};
+/* End PBXContainerItemProxy section */
+
+/* Begin PBXFileReference section */
+		05B0A6CE565B6DFF7EB0C927 /* WindowInfo.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WindowInfo.swift; sourceTree = "<group>"; };
+		081205821E98F1C145B46195 /* AnyPiPLogger.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AnyPiPLogger.swift; sourceTree = "<group>"; };
+		1677258C34B4431B429D51C6 /* MenuBarRootView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MenuBarRootView.swift; sourceTree = "<group>"; };
+		177618AEF31396EF5CB134C2 /* AXWindowLocator.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AXWindowLocator.swift; sourceTree = "<group>"; };
+		183D7565812B565C700D16CC /* KeyboardEventForwarder.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = KeyboardEventForwarder.swift; sourceTree = "<group>"; };
+		199FF17DF1AE5A7A61B4B1AF /* PiPPanelController.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PiPPanelController.swift; sourceTree = "<group>"; };
+		1E6F069E8501980D6195C4B8 /* PiPSessionManager.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PiPSessionManager.swift; sourceTree = "<group>"; };
+		2044EE1700660560E1FA12D5 /* VirtualDisplayHost.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = VirtualDisplayHost.swift; sourceTree = "<group>"; };
+		209C4453450CE4A5E6FE6B43 /* CoordinateTranslator.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CoordinateTranslator.swift; sourceTree = "<group>"; };
+		241E88C05FDBF8A9C3C9973B /* CGVirtualDisplayPrivate.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; path = CGVirtualDisplayPrivate.h; sourceTree = "<group>"; };
+		28FE44A7A0AAD50095BB10AE /* VirtualDisplayCoordinator.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = VirtualDisplayCoordinator.swift; sourceTree = "<group>"; };
+		2F7BBCDC7353B19CAC996931 /* Assets.xcassets */ = {isa = PBXFileReference; lastKnownFileType = folder.assetcatalog; path = Assets.xcassets; sourceTree = "<group>"; };
+		48C3157FA10EA330CB53BEA6 /* PermissionsManager.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PermissionsManager.swift; sourceTree = "<group>"; };
+		4958D12FC3CBE3BFB04337F1 /* PiPVideoLayerView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PiPVideoLayerView.swift; sourceTree = "<group>"; };
+		55CAE6E37899A84E440C27FF /* SettingsView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SettingsView.swift; sourceTree = "<group>"; };
+		56E93B99E976C7BB7FC882FC /* AnyPiPTests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = AnyPiPTests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
+		6D93350F4F26AADCE9E0CD9E /* InteractionForwarder.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = InteractionForwarder.swift; sourceTree = "<group>"; };
+		6FD44A8280502CC0ED58E544 /* MouseEventForwarder.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MouseEventForwarder.swift; sourceTree = "<group>"; };
+		822D1C8A3B37F85F0A052856 /* AppDelegate.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppDelegate.swift; sourceTree = "<group>"; };
+		8997FA67671E7220BA217455 /* SettingsStore.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SettingsStore.swift; sourceTree = "<group>"; };
+		8CAE614A41CE4FA9DB6AF4B6 /* WindowEnumerator.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WindowEnumerator.swift; sourceTree = "<group>"; };
+		91568B2AE4ED0E41C6F67E04 /* WindowPickerView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WindowPickerView.swift; sourceTree = "<group>"; };
+		9A657C5C59DD658F12B6976B /* ActiveSessionsView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ActiveSessionsView.swift; sourceTree = "<group>"; };
+		157725739E1865BCF250E55F /* WindowFlingDetector.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WindowFlingDetector.swift; sourceTree = "<group>"; };
+		632BDED0CEF214ED6759B11D /* MenuBarStyles.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MenuBarStyles.swift; sourceTree = "<group>"; };
+		AF971938607C4669700A7070 /* CloseDropZoneOverlay.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CloseDropZoneOverlay.swift; sourceTree = "<group>"; };
+		A9E39D95ADF425CDC98B1416 /* CoordinateTranslatorTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CoordinateTranslatorTests.swift; sourceTree = "<group>"; };
+		AFF94CA42B9F307B59429A4D /* AnyPiP.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = AnyPiP.app; sourceTree = BUILT_PRODUCTS_DIR; };
+		C7F6213E0A7FF4839A5B1935 /* PiPSession.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PiPSession.swift; sourceTree = "<group>"; };
+		F40F72E2EADDC31A21647A44 /* CaptureSession.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CaptureSession.swift; sourceTree = "<group>"; };
+		F72EF34E47C55CB1E494FC70 /* AnyPiPApp.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AnyPiPApp.swift; sourceTree = "<group>"; };
+/* End PBXFileReference section */
+
+/* Begin PBXGroup section */
+		2136E771CA7AE82F642BC90F /* Support */ = {
+			isa = PBXGroup;
+			children = (
+				081205821E98F1C145B46195 /* AnyPiPLogger.swift */,
+				241E88C05FDBF8A9C3C9973B /* CGVirtualDisplayPrivate.h */,
+			);
+			path = Support;
+			sourceTree = "<group>";
+		};
+		294FACDAD0ED9B6F498E2496 /* MenuBar */ = {
+			isa = PBXGroup;
+			children = (
+				9A657C5C59DD658F12B6976B /* ActiveSessionsView.swift */,
+				1677258C34B4431B429D51C6 /* MenuBarRootView.swift */,
+				91568B2AE4ED0E41C6F67E04 /* WindowPickerView.swift */,
+				632BDED0CEF214ED6759B11D /* MenuBarStyles.swift */,
+			);
+			path = MenuBar;
+			sourceTree = "<group>";
+		};
+		3BA4370972D41AF8F6132CDB /* Models */ = {
+			isa = PBXGroup;
+			children = (
+				C7F6213E0A7FF4839A5B1935 /* PiPSession.swift */,
+				05B0A6CE565B6DFF7EB0C927 /* WindowInfo.swift */,
+			);
+			path = Models;
+			sourceTree = "<group>";
+		};
+		41F815A72D92BAD846559172 /* AnyPiPTests */ = {
+			isa = PBXGroup;
+			children = (
+				A9E39D95ADF425CDC98B1416 /* CoordinateTranslatorTests.swift */,
+			);
+			path = AnyPiPTests;
+			sourceTree = "<group>";
+		};
+		6CA6E450BF80575CF794D39A /* AnyPiP */ = {
+			isa = PBXGroup;
+			children = (
+				FDB76B21D57A6EC6C2AB943D /* App */,
+				E6C37CBCE94FBC883D37AFDD /* Capture */,
+				B9164391C873AD634C8D120A /* Interaction */,
+				294FACDAD0ED9B6F498E2496 /* MenuBar */,
+				3BA4370972D41AF8F6132CDB /* Models */,
+				A9C1A98D5922C4B767D7B0A8 /* Permissions */,
+				9F1A49ADACD3EAA06CD56C63 /* PiPPanel */,
+				C6D2C7E38D038507FC502464 /* Resources */,
+				BD59A23DED85787E7986B995 /* Settings */,
+				2136E771CA7AE82F642BC90F /* Support */,
+			);
+			path = AnyPiP;
+			sourceTree = "<group>";
+		};
+		9F1A49ADACD3EAA06CD56C63 /* PiPPanel */ = {
+			isa = PBXGroup;
+			children = (
+				199FF17DF1AE5A7A61B4B1AF /* PiPPanelController.swift */,
+				1E6F069E8501980D6195C4B8 /* PiPSessionManager.swift */,
+				4958D12FC3CBE3BFB04337F1 /* PiPVideoLayerView.swift */,
+				AF971938607C4669700A7070 /* CloseDropZoneOverlay.swift */,
+			);
+			path = PiPPanel;
+			sourceTree = "<group>";
+		};
+		A9C1A98D5922C4B767D7B0A8 /* Permissions */ = {
+			isa = PBXGroup;
+			children = (
+				48C3157FA10EA330CB53BEA6 /* PermissionsManager.swift */,
+			);
+			path = Permissions;
+			sourceTree = "<group>";
+		};
+		B4678FF517BA109033E0DFAF = {
+			isa = PBXGroup;
+			children = (
+				6CA6E450BF80575CF794D39A /* AnyPiP */,
+				41F815A72D92BAD846559172 /* AnyPiPTests */,
+				BBBBBC3CF76EFB9104706AE2 /* Products */,
+			);
+			sourceTree = "<group>";
+		};
+		B9164391C873AD634C8D120A /* Interaction */ = {
+			isa = PBXGroup;
+			children = (
+				177618AEF31396EF5CB134C2 /* AXWindowLocator.swift */,
+				209C4453450CE4A5E6FE6B43 /* CoordinateTranslator.swift */,
+				6D93350F4F26AADCE9E0CD9E /* InteractionForwarder.swift */,
+				183D7565812B565C700D16CC /* KeyboardEventForwarder.swift */,
+				6FD44A8280502CC0ED58E544 /* MouseEventForwarder.swift */,
+				157725739E1865BCF250E55F /* WindowFlingDetector.swift */,
+			);
+			path = Interaction;
+			sourceTree = "<group>";
+		};
+		BBBBBC3CF76EFB9104706AE2 /* Products */ = {
+			isa = PBXGroup;
+			children = (
+				AFF94CA42B9F307B59429A4D /* AnyPiP.app */,
+				56E93B99E976C7BB7FC882FC /* AnyPiPTests.xctest */,
+			);
+			name = Products;
+			sourceTree = "<group>";
+		};
+		BD59A23DED85787E7986B995 /* Settings */ = {
+			isa = PBXGroup;
+			children = (
+				8997FA67671E7220BA217455 /* SettingsStore.swift */,
+				55CAE6E37899A84E440C27FF /* SettingsView.swift */,
+			);
+			path = Settings;
+			sourceTree = "<group>";
+		};
+		C6D2C7E38D038507FC502464 /* Resources */ = {
+			isa = PBXGroup;
+			children = (
+				2F7BBCDC7353B19CAC996931 /* Assets.xcassets */,
+			);
+			path = Resources;
+			sourceTree = "<group>";
+		};
+		E6C37CBCE94FBC883D37AFDD /* Capture */ = {
+			isa = PBXGroup;
+			children = (
+				F40F72E2EADDC31A21647A44 /* CaptureSession.swift */,
+				28FE44A7A0AAD50095BB10AE /* VirtualDisplayCoordinator.swift */,
+				2044EE1700660560E1FA12D5 /* VirtualDisplayHost.swift */,
+				8CAE614A41CE4FA9DB6AF4B6 /* WindowEnumerator.swift */,
+			);
+			path = Capture;
+			sourceTree = "<group>";
+		};
+		FDB76B21D57A6EC6C2AB943D /* App */ = {
+			isa = PBXGroup;
+			children = (
+				F72EF34E47C55CB1E494FC70 /* AnyPiPApp.swift */,
+				822D1C8A3B37F85F0A052856 /* AppDelegate.swift */,
+			);
+			path = App;
+			sourceTree = "<group>";
+		};
+/* End PBXGroup section */
+
+/* Begin PBXNativeTarget section */
+		0C4119CE78E8993B3C89E7A8 /* AnyPiP */ = {
+			isa = PBXNativeTarget;
+			buildConfigurationList = 52D117DD3B6A159E648EDE52 /* Build configuration list for PBXNativeTarget "AnyPiP" */;
+			buildPhases = (
+				05E89EE12DE8090C84D06B26 /* Sources */,
+				5213FF4DC0A14E8BB5E9BDA6 /* Resources */,
+			);
+			buildRules = (
+			);
+			dependencies = (
+			);
+			name = AnyPiP;
+			packageProductDependencies = (
+			);
+			productName = AnyPiP;
+			productReference = AFF94CA42B9F307B59429A4D /* AnyPiP.app */;
+			productType = "com.apple.product-type.application";
+		};
+		D046A1E5F95692AD3E98D753 /* AnyPiPTests */ = {
+			isa = PBXNativeTarget;
+			buildConfigurationList = 32340D6D70B9A68DE645A011 /* Build configuration list for PBXNativeTarget "AnyPiPTests" */;
+			buildPhases = (
+				907E743415AE8A7AFEE39BE1 /* Sources */,
+			);
+			buildRules = (
+			);
+			dependencies = (
+				3D760789A9F0F0DF8BC71BFA /* PBXTargetDependency */,
+			);
+			name = AnyPiPTests;
+			packageProductDependencies = (
+			);
+			productName = AnyPiPTests;
+			productReference = 56E93B99E976C7BB7FC882FC /* AnyPiPTests.xctest */;
+			productType = "com.apple.product-type.bundle.unit-test";
+		};
+/* End PBXNativeTarget section */
+
+/* Begin PBXProject section */
+		D9B9456DAD08F7242F0D558D /* Project object */ = {
+			isa = PBXProject;
+			attributes = {
+				BuildIndependentTargetsInParallel = YES;
+				LastUpgradeCheck = 1430;
+				TargetAttributes = {
+					0C4119CE78E8993B3C89E7A8 = {
+						DevelopmentTeam = "";
+						ProvisioningStyle = Automatic;
+					};
+					D046A1E5F95692AD3E98D753 = {
+						DevelopmentTeam = "";
+						ProvisioningStyle = Automatic;
+					};
+				};
+			};
+			buildConfigurationList = 7F252F2DC0DC01D8BAC219D2 /* Build configuration list for PBXProject "AnyPiP" */;
+			developmentRegion = en;
+			hasScannedForEncodings = 0;
+			knownRegions = (
+				Base,
+				en,
+			);
+			mainGroup = B4678FF517BA109033E0DFAF;
+			minimizedProjectReferenceProxies = 1;
+			preferredProjectObjectVersion = 77;
+			productRefGroup = BBBBBC3CF76EFB9104706AE2 /* Products */;
+			projectDirPath = "";
+			projectRoot = "";
+			targets = (
+				0C4119CE78E8993B3C89E7A8 /* AnyPiP */,
+				D046A1E5F95692AD3E98D753 /* AnyPiPTests */,
+			);
+		};
+/* End PBXProject section */
+
+/* Begin PBXResourcesBuildPhase section */
+		5213FF4DC0A14E8BB5E9BDA6 /* Resources */ = {
+			isa = PBXResourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				0C3CEF9EDC6CCB86CCA649FE /* Assets.xcassets in Resources */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+/* End PBXResourcesBuildPhase section */
+
+/* Begin PBXSourcesBuildPhase section */
+		05E89EE12DE8090C84D06B26 /* Sources */ = {
+			isa = PBXSourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				03D706D218E6A30045D2A69B /* AXWindowLocator.swift in Sources */,
+				012A2FA530B744548AF1C061 /* WindowFlingDetector.swift in Sources */,
+				49FE0522BCC4D74290E4E4E1 /* MenuBarStyles.swift in Sources */,
+				A5B0FF088DE45B5955B52AB7 /* CloseDropZoneOverlay.swift in Sources */,
+				929002D5D1088EE1F6694195 /* ActiveSessionsView.swift in Sources */,
+				4676C80D6001CB236C80DE76 /* AnyPiPApp.swift in Sources */,
+				78B28B0FEE9C19C6355E5F69 /* AnyPiPLogger.swift in Sources */,
+				49CDDD041C8B5DD59AC56100 /* AppDelegate.swift in Sources */,
+				FB6AE5F9D904F04C0006A366 /* CaptureSession.swift in Sources */,
+				3F43F40D9F1FE46BBD79909C /* CoordinateTranslator.swift in Sources */,
+				9C07AD358E16A6646D6E429E /* InteractionForwarder.swift in Sources */,
+				7D532E317EB4B68106DD1DA3 /* KeyboardEventForwarder.swift in Sources */,
+				D4811025A1F6F8DB6BC16442 /* MenuBarRootView.swift in Sources */,
+				4F488F2C62C79F0A5E82CD6F /* MouseEventForwarder.swift in Sources */,
+				8BEBC3809CE88D7576271C83 /* PermissionsManager.swift in Sources */,
+				AC6D6D387732CB10C6D3EBC1 /* PiPPanelController.swift in Sources */,
+				D3F30B8C8A562AB732845F0D /* PiPSession.swift in Sources */,
+				5AC23A88C5C54D6E16C9E275 /* PiPSessionManager.swift in Sources */,
+				60E6A5C5AD8DCF52BC783D42 /* PiPVideoLayerView.swift in Sources */,
+				05B178D84B211B2350831E48 /* SettingsStore.swift in Sources */,
+				4E8DABECE5CE2A754F85DF19 /* SettingsView.swift in Sources */,
+				8E50C8866F25C1CEA2AA5D95 /* VirtualDisplayCoordinator.swift in Sources */,
+				50D0E625646EFB221EE819BF /* VirtualDisplayHost.swift in Sources */,
+				3881F7F8274DA41974C0662B /* WindowEnumerator.swift in Sources */,
+				881A9FF59B4B0E69C4CF3A43 /* WindowInfo.swift in Sources */,
+				448C5377F80257810B863B16 /* WindowPickerView.swift in Sources */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		907E743415AE8A7AFEE39BE1 /* Sources */ = {
+			isa = PBXSourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				BCCD395E90A1E402A0F8A77A /* CoordinateTranslatorTests.swift in Sources */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+/* End PBXSourcesBuildPhase section */
+
+/* Begin PBXTargetDependency section */
+		3D760789A9F0F0DF8BC71BFA /* PBXTargetDependency */ = {
+			isa = PBXTargetDependency;
+			target = 0C4119CE78E8993B3C89E7A8 /* AnyPiP */;
+			targetProxy = E277008A563D5D605A2EF71A /* PBXContainerItemProxy */;
+		};
+/* End PBXTargetDependency section */
+
+/* Begin XCBuildConfiguration section */
+		4CE2A166D3BC5711E037E970 /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
+				CODE_SIGN_ENTITLEMENTS = AnyPiP/App/AnyPiP.entitlements;
+				COMBINE_HIDPI_IMAGES = YES;
+				GENERATE_INFOPLIST_FILE = NO;
+				INFOPLIST_FILE = AnyPiP/App/Info.plist;
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/../Frameworks",
+				);
+				PRODUCT_BUNDLE_IDENTIFIER = com.anypip.mac;
+				PRODUCT_NAME = AnyPiP;
+				SDKROOT = macosx;
+				SWIFT_EMIT_LOC_STRINGS = NO;
+				SWIFT_OBJC_BRIDGING_HEADER = AnyPiP/Support/CGVirtualDisplayPrivate.h;
+			};
+			name = Debug;
+		};
+		5E5F3822D4E7A427465284ED /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				BUNDLE_LOADER = "$(TEST_HOST)";
+				COMBINE_HIDPI_IMAGES = YES;
+				GENERATE_INFOPLIST_FILE = YES;
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/../Frameworks",
+					"@loader_path/../Frameworks",
+				);
+				PRODUCT_BUNDLE_IDENTIFIER = com.anypip.mac.tests;
+				SDKROOT = macosx;
+				TEST_HOST = "$(BUILT_PRODUCTS_DIR)/AnyPiP.app/Contents/MacOS/AnyPiP";
+			};
+			name = Release;
+		};
+		8C009CA00BEB65DDA69E57EB /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				BUNDLE_LOADER = "$(TEST_HOST)";
+				COMBINE_HIDPI_IMAGES = YES;
+				GENERATE_INFOPLIST_FILE = YES;
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/../Frameworks",
+					"@loader_path/../Frameworks",
+				);
+				PRODUCT_BUNDLE_IDENTIFIER = com.anypip.mac.tests;
+				SDKROOT = macosx;
+				TEST_HOST = "$(BUILT_PRODUCTS_DIR)/AnyPiP.app/Contents/MacOS/AnyPiP";
+			};
+			name = Debug;
+		};
+		A5F782E42D870236B636CBB1 /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ALWAYS_SEARCH_USER_PATHS = NO;
+				CLANG_ANALYZER_NONNULL = YES;
+				CLANG_ANALYZER_NUMBER_OBJECT_CONVERSION = YES_AGGRESSIVE;
+				CLANG_CXX_LANGUAGE_STANDARD = "gnu++14";
+				CLANG_CXX_LIBRARY = "libc++";
+				CLANG_ENABLE_MODULES = YES;
+				CLANG_ENABLE_OBJC_ARC = YES;
+				CLANG_ENABLE_OBJC_WEAK = YES;
+				CLANG_WARN_BLOCK_CAPTURE_AUTORELEASING = YES;
+				CLANG_WARN_BOOL_CONVERSION = YES;
+				CLANG_WARN_COMMA = YES;
+				CLANG_WARN_CONSTANT_CONVERSION = YES;
+				CLANG_WARN_DEPRECATED_OBJC_IMPLEMENTATIONS = YES;
+				CLANG_WARN_DIRECT_OBJC_ISA_USAGE = YES_ERROR;
+				CLANG_WARN_DOCUMENTATION_COMMENTS = YES;
+				CLANG_WARN_EMPTY_BODY = YES;
+				CLANG_WARN_ENUM_CONVERSION = YES;
+				CLANG_WARN_INFINITE_RECURSION = YES;
+				CLANG_WARN_INT_CONVERSION = YES;
+				CLANG_WARN_NON_LITERAL_NULL_CONVERSION = YES;
+				CLANG_WARN_OBJC_IMPLICIT_RETAIN_SELF = YES;
+				CLANG_WARN_OBJC_LITERAL_CONVERSION = YES;
+				CLANG_WARN_OBJC_ROOT_CLASS = YES_ERROR;
+				CLANG_WARN_QUOTED_INCLUDE_IN_FRAMEWORK_HEADER = YES;
+				CLANG_WARN_RANGE_LOOP_ANALYSIS = YES;
+				CLANG_WARN_STRICT_PROTOTYPES = YES;
+				CLANG_WARN_SUSPICIOUS_MOVE = YES;
+				CLANG_WARN_UNGUARDED_AVAILABILITY = YES_AGGRESSIVE;
+				CLANG_WARN_UNREACHABLE_CODE = YES;
+				CLANG_WARN__DUPLICATE_METHOD_MATCH = YES;
+				CODE_SIGN_STYLE = Automatic;
+				COPY_PHASE_STRIP = NO;
+				CURRENT_PROJECT_VERSION = 1;
+				DEBUG_INFORMATION_FORMAT = "dwarf-with-dsym";
+				DEVELOPMENT_TEAM = "";
+				ENABLE_HARDENED_RUNTIME = YES;
+				ENABLE_NS_ASSERTIONS = NO;
+				ENABLE_STRICT_OBJC_MSGSEND = YES;
+				GCC_C_LANGUAGE_STANDARD = gnu11;
+				GCC_NO_COMMON_BLOCKS = YES;
+				GCC_WARN_64_TO_32_BIT_CONVERSION = YES;
+				GCC_WARN_ABOUT_RETURN_TYPE = YES_ERROR;
+				GCC_WARN_UNDECLARED_SELECTOR = YES;
+				GCC_WARN_UNINITIALIZED_AUTOS = YES_AGGRESSIVE;
+				GCC_WARN_UNUSED_FUNCTION = YES;
+				GCC_WARN_UNUSED_VARIABLE = YES;
+				MACOSX_DEPLOYMENT_TARGET = 14.0;
+				MARKETING_VERSION = 0.1.0;
+				MTL_ENABLE_DEBUG_INFO = NO;
+				MTL_FAST_MATH = YES;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SDKROOT = macosx;
+				SWIFT_COMPILATION_MODE = wholemodule;
+				SWIFT_OPTIMIZATION_LEVEL = "-O";
+				SWIFT_VERSION = 5.0;
+			};
+			name = Release;
+		};
+		A6052C05CC7C532FD7D97C47 /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ALWAYS_SEARCH_USER_PATHS = NO;
+				CLANG_ANALYZER_NONNULL = YES;
+				CLANG_ANALYZER_NUMBER_OBJECT_CONVERSION = YES_AGGRESSIVE;
+				CLANG_CXX_LANGUAGE_STANDARD = "gnu++14";
+				CLANG_CXX_LIBRARY = "libc++";
+				CLANG_ENABLE_MODULES = YES;
+				CLANG_ENABLE_OBJC_ARC = YES;
+				CLANG_ENABLE_OBJC_WEAK = YES;
+				CLANG_WARN_BLOCK_CAPTURE_AUTORELEASING = YES;
+				CLANG_WARN_BOOL_CONVERSION = YES;
+				CLANG_WARN_COMMA = YES;
+				CLANG_WARN_CONSTANT_CONVERSION = YES;
+				CLANG_WARN_DEPRECATED_OBJC_IMPLEMENTATIONS = YES;
+				CLANG_WARN_DIRECT_OBJC_ISA_USAGE = YES_ERROR;
+				CLANG_WARN_DOCUMENTATION_COMMENTS = YES;
+				CLANG_WARN_EMPTY_BODY = YES;
+				CLANG_WARN_ENUM_CONVERSION = YES;
+				CLANG_WARN_INFINITE_RECURSION = YES;
+				CLANG_WARN_INT_CONVERSION = YES;
+				CLANG_WARN_NON_LITERAL_NULL_CONVERSION = YES;
+				CLANG_WARN_OBJC_IMPLICIT_RETAIN_SELF = YES;
+				CLANG_WARN_OBJC_LITERAL_CONVERSION = YES;
+				CLANG_WARN_OBJC_ROOT_CLASS = YES_ERROR;
+				CLANG_WARN_QUOTED_INCLUDE_IN_FRAMEWORK_HEADER = YES;
+				CLANG_WARN_RANGE_LOOP_ANALYSIS = YES;
+				CLANG_WARN_STRICT_PROTOTYPES = YES;
+				CLANG_WARN_SUSPICIOUS_MOVE = YES;
+				CLANG_WARN_UNGUARDED_AVAILABILITY = YES_AGGRESSIVE;
+				CLANG_WARN_UNREACHABLE_CODE = YES;
+				CLANG_WARN__DUPLICATE_METHOD_MATCH = YES;
+				CODE_SIGN_STYLE = Automatic;
+				COPY_PHASE_STRIP = NO;
+				CURRENT_PROJECT_VERSION = 1;
+				DEBUG_INFORMATION_FORMAT = dwarf;
+				DEVELOPMENT_TEAM = "";
+				ENABLE_HARDENED_RUNTIME = YES;
+				ENABLE_STRICT_OBJC_MSGSEND = YES;
+				ENABLE_TESTABILITY = YES;
+				GCC_C_LANGUAGE_STANDARD = gnu11;
+				GCC_DYNAMIC_NO_PIC = NO;
+				GCC_NO_COMMON_BLOCKS = YES;
+				GCC_OPTIMIZATION_LEVEL = 0;
+				GCC_PREPROCESSOR_DEFINITIONS = (
+					"$(inherited)",
+					"DEBUG=1",
+				);
+				GCC_WARN_64_TO_32_BIT_CONVERSION = YES;
+				GCC_WARN_ABOUT_RETURN_TYPE = YES_ERROR;
+				GCC_WARN_UNDECLARED_SELECTOR = YES;
+				GCC_WARN_UNINITIALIZED_AUTOS = YES_AGGRESSIVE;
+				GCC_WARN_UNUSED_FUNCTION = YES;
+				GCC_WARN_UNUSED_VARIABLE = YES;
+				MACOSX_DEPLOYMENT_TARGET = 14.0;
+				MARKETING_VERSION = 0.1.0;
+				MTL_ENABLE_DEBUG_INFO = INCLUDE_SOURCE;
+				MTL_FAST_MATH = YES;
+				ONLY_ACTIVE_ARCH = YES;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SDKROOT = macosx;
+				SWIFT_ACTIVE_COMPILATION_CONDITIONS = DEBUG;
+				SWIFT_OPTIMIZATION_LEVEL = "-Onone";
+				SWIFT_VERSION = 5.0;
+			};
+			name = Debug;
+		};
+		B8C186800DC0E09B92097EC2 /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
+				CODE_SIGN_ENTITLEMENTS = AnyPiP/App/AnyPiP.entitlements;
+				COMBINE_HIDPI_IMAGES = YES;
+				GENERATE_INFOPLIST_FILE = NO;
+				INFOPLIST_FILE = AnyPiP/App/Info.plist;
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/../Frameworks",
+				);
+				PRODUCT_BUNDLE_IDENTIFIER = com.anypip.mac;
+				PRODUCT_NAME = AnyPiP;
+				SDKROOT = macosx;
+				SWIFT_EMIT_LOC_STRINGS = NO;
+				SWIFT_OBJC_BRIDGING_HEADER = AnyPiP/Support/CGVirtualDisplayPrivate.h;
+			};
+			name = Release;
+		};
+/* End XCBuildConfiguration section */
+
+/* Begin XCConfigurationList section */
+		32340D6D70B9A68DE645A011 /* Build configuration list for PBXNativeTarget "AnyPiPTests" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				8C009CA00BEB65DDA69E57EB /* Debug */,
+				5E5F3822D4E7A427465284ED /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Debug;
+		};
+		52D117DD3B6A159E648EDE52 /* Build configuration list for PBXNativeTarget "AnyPiP" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				4CE2A166D3BC5711E037E970 /* Debug */,
+				B8C186800DC0E09B92097EC2 /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Debug;
+		};
+		7F252F2DC0DC01D8BAC219D2 /* Build configuration list for PBXProject "AnyPiP" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				A6052C05CC7C532FD7D97C47 /* Debug */,
+				A5F782E42D870236B636CBB1 /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Debug;
+		};
+/* End XCConfigurationList section */
+	};
+	rootObject = D9B9456DAD08F7242F0D558D /* Project object */;
+}
