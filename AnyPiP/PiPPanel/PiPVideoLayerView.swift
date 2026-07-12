@@ -132,6 +132,45 @@ final class PiPVideoLayerView: NSView {
         displayLayer.enqueue(sampleBuffer)
     }
 
+    /// A one-shot ripple — a ring expanding from the center and fading out — played once the
+    /// panel finishes sliding into place (PiPPanelController.animateEntrance). Purely a CALayer
+    /// animation on this view's own layer, so unlike the real-window animation this replaced
+    /// (manually stepping another process's Accessibility frame/alpha at fixed intervals), it's
+    /// entirely GPU-composited by AppKit/CoreAnimation and stays smooth regardless of anything
+    /// else going on.
+    func playAppearRipple() {
+        guard let rootLayer = layer else { return }
+        let diameter = min(bounds.width, bounds.height) * 0.7
+        let ripple = CALayer()
+        ripple.frame = CGRect(x: bounds.midX - diameter / 2, y: bounds.midY - diameter / 2, width: diameter, height: diameter)
+        ripple.cornerRadius = diameter / 2
+        ripple.borderWidth = 2
+        ripple.borderColor = NSColor.white.cgColor
+        ripple.backgroundColor = NSColor.clear.cgColor
+        ripple.opacity = 0
+        rootLayer.addSublayer(ripple)
+
+        let scale = CABasicAnimation(keyPath: "transform.scale")
+        scale.fromValue = 0.5
+        scale.toValue = 1.5
+
+        let opacity = CAKeyframeAnimation(keyPath: "opacity")
+        opacity.values = [0, 0.85, 0]
+        opacity.keyTimes = [0, 0.25, 1]
+
+        let group = CAAnimationGroup()
+        group.animations = [scale, opacity]
+        group.duration = 0.5
+        group.timingFunction = CAMediaTimingFunction(name: .easeOut)
+        group.isRemovedOnCompletion = false
+        group.fillMode = .forwards
+        ripple.add(group, forKey: "appearRipple")
+
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.55) { [weak ripple] in
+            ripple?.removeFromSuperlayer()
+        }
+    }
+
     /// The actual on-screen rect of the video content inside this view, accounting for
     /// .resizeAspect letterboxing when the panel's aspect ratio doesn't match the source window's.
     func displayedVideoRect(nativeSize: CGSize) -> CGRect {

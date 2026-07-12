@@ -18,11 +18,8 @@ import ApplicationServices
 /// WindowInfo match is what rejected it.
 @MainActor
 final class WindowFlingDetector {
-    /// - Parameters:
-    ///   - windowInfo: the window to convert to PiP.
-    ///   - openingFrame: its real on-screen frame (AppKit space) at the moment of the fling, so
-    ///     the panel can animate in from there instead of just appearing at its final spot.
-    var onFling: ((_ windowInfo: WindowInfo, _ openingFrame: NSRect) -> Void)?
+    /// The window to convert to PiP.
+    var onFling: ((_ windowInfo: WindowInfo) -> Void)?
 
     private var mouseDownMonitor: Any?
     private var mouseDraggedMonitor: Any?
@@ -156,7 +153,7 @@ final class WindowFlingDetector {
         }
 
         AnyPiPLogger.interaction.debug("Fling: starting PiP session for \(windowInfo.title)")
-        onFling?(windowInfo, Self.appKitRect(from: quartzFrame))
+        onFling?(windowInfo)
     }
 
     private static func distance(_ a: CGRect, _ b: CGRect) -> CGFloat {
@@ -166,22 +163,12 @@ final class WindowFlingDetector {
     /// AXUIElementCopyElementAtPosition and window frames (AXWindowLocator, WindowInfo.frame) all
     /// use top-left-origin Quartz space; NSEvent.locationInWindow (screen coords, for a global-
     /// monitor event with no real window)/NSScreen.frame use bottom-left-origin AppKit space.
-    /// Both conversions pivot on the primary screen's height — the screen at index 0 of
+    /// The conversion pivots on the primary screen's height — the screen at index 0 of
     /// NSScreen.screens is documented to be the one containing the menu bar, whose AppKit frame
     /// origin is .zero and which sits at Quartz global (0,0) at its top-left.
     private static func quartzPoint(from appKitPoint: NSPoint) -> CGPoint {
         let primaryHeight = NSScreen.screens.first?.frame.height ?? 0
         return CGPoint(x: appKitPoint.x, y: primaryHeight - appKitPoint.y)
-    }
-
-    private static func appKitRect(from quartzRect: CGRect) -> NSRect {
-        let primaryHeight = NSScreen.screens.first?.frame.height ?? 0
-        return NSRect(
-            x: quartzRect.origin.x,
-            y: primaryHeight - quartzRect.origin.y - quartzRect.height,
-            width: quartzRect.width,
-            height: quartzRect.height
-        )
     }
 
     private static func role(of element: AXUIElement) -> String? {

@@ -23,13 +23,9 @@ final class PiPPanelController: NSObject {
     let panel: NSPanel
     let videoView: PiPVideoLayerView
 
-    /// - Parameter openingFrame: when set (the flung-window gesture — see WindowFlingDetector),
-    ///   the panel is created at this rect (the source window's real on-screen position/size at
-    ///   the moment of the fling) and immediately animated down to `initialFrame`, giving a
-    ///   "shrinks into place" entrance instead of just appearing at its final stacked spot.
-    init(initialFrame: NSRect, nativeSize: CGSize, openingFrame: NSRect? = nil) {
+    init(initialFrame: NSRect, nativeSize: CGSize) {
         panel = InteractivePiPPanel(
-            contentRect: openingFrame ?? initialFrame,
+            contentRect: initialFrame,
             styleMask: [.nonactivatingPanel, .borderless, .resizable],
             backing: .buffered,
             defer: false
@@ -57,15 +53,34 @@ final class PiPPanelController: NSObject {
         videoView.interactionDelegate = self
         panel.contentView = videoView
 
+        animateEntrance(to: initialFrame)
+    }
+
+    /// Pops the panel in by sliding it from off past the right edge of its screen to
+    /// `finalFrame` — chosen over animating anything about the real source window (tried:
+    /// shrinking/translating/fading it via a burst of manual Accessibility frame/alpha updates —
+    /// reverted, since each step is a real IPC round-trip to a different process rather than a
+    /// GPU-composited animation, and was visibly janky). Sliding the panel is our own NSView/
+    /// CALayer being animated by AppKit directly, so it's smooth regardless of what the source
+    /// app is doing. Finishes with a one-shot ripple flourish on the video view itself (see
+    /// PiPVideoLayerView.playAppearRipple).
+    private func animateEntrance(to finalFrame: NSRect) {
+        let screen = NSScreen.screens.first { $0.frame.intersects(finalFrame) } ?? NSScreen.main
+        let offscreenX = (screen?.frame.maxX ?? finalFrame.maxX) + finalFrame.width
+        let startFrame = NSRect(x: offscreenX, y: finalFrame.origin.y, width: finalFrame.width, height: finalFrame.height)
+
+        panel.setFrame(startFrame, display: false)
+        panel.alphaValue = 0
         panel.orderFrontRegardless()
 
-        if openingFrame != nil {
-            NSAnimationContext.runAnimationGroup { context in
-                context.duration = 0.28
-                context.timingFunction = CAMediaTimingFunction(name: .easeOut)
-                panel.animator().setFrame(initialFrame, display: true)
-            }
-        }
+        NSAnimationContext.runAnimationGroup({ context in
+            context.duration = 0.32
+            context.timingFunction = CAMediaTimingFunction(name: .easeOut)
+            panel.animator().setFrame(finalFrame, display: true)
+            panel.animator().alphaValue = 1
+        }, completionHandler: { [weak self] in
+            self?.videoView.playAppearRipple()
+        })
     }
 
     /// Shrinks and fades the panel out before actually closing it — instant removal (the old

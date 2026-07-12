@@ -19,8 +19,8 @@ final class PiPSessionManager: NSObject, ObservableObject {
             name: NSWorkspace.didActivateApplicationNotification,
             object: nil
         )
-        flingDetector.onFling = { [weak self] windowInfo, openingFrame in
-            self?.startSession(for: windowInfo, openingFrame: openingFrame)
+        flingDetector.onFling = { [weak self] windowInfo in
+            self?.startSession(for: windowInfo)
         }
         flingDetector.start()
     }
@@ -54,10 +54,7 @@ final class PiPSessionManager: NSObject, ObservableObject {
         }
     }
 
-    /// - Parameter openingFrame: set when starting from a fling gesture (WindowFlingDetector) —
-    ///   the panel is created at (and animates in from) the source window's real on-screen rect
-    ///   instead of just appearing at its default stacked position.
-    func startSession(for windowInfo: WindowInfo, openingFrame: NSRect? = nil) {
+    func startSession(for windowInfo: WindowInfo) {
         debugTrace("startSession(for:) called for \(windowInfo.ownerAppName)/\(windowInfo.title)")
         if sessions.contains(where: { $0.windowInfo.id == windowInfo.id }) {
             AnyPiPLogger.app.info("Session already active for window \(windowInfo.id)")
@@ -66,7 +63,7 @@ final class PiPSessionManager: NSObject, ObservableObject {
 
         let panelFrame = defaultPanelFrame(for: windowInfo)
         debugTrace("creating PiPPanelController with frame \(panelFrame)")
-        let panelController = PiPPanelController(initialFrame: panelFrame, nativeSize: windowInfo.frame.size, openingFrame: openingFrame)
+        let panelController = PiPPanelController(initialFrame: panelFrame, nativeSize: windowInfo.frame.size)
         panelController.delegate = self
         debugTrace("panel created and ordered front")
 
