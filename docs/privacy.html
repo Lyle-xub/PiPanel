@@ -21,6 +21,7 @@
     </a>
     <div class="nav-links">
       <a href="index.html#features">功能</a>
+      <a href="index.html#pricing">价格</a>
       <a href="index.html#faq">FAQ</a>
       <a class="nav-cta" href="https://github.com/Lyle-xub/PiPanel" target="_blank" rel="noopener">
         <svg viewBox="0 0 16 16" width="16" height="16" fill="currentColor"><path d="M8 0C3.58 0 0 3.58 0 8c0 3.54 2.29 6.53 5.47 7.59.4.07.55-.17.55-.38 0-.19-.01-.82-.01-1.49-2.01.37-2.53-.49-2.69-.94-.09-.23-.48-.94-.82-1.13-.28-.15-.68-.52-.01-.53.63-.01 1.08.58 1.23.82.72 1.21 1.87.87 2.33.66.07-.52.28-.87.51-1.07-1.78-.2-3.64-.89-3.64-3.95 0-.87.31-1.59.82-2.15-.08-.2-.36-1.02.08-2.12 0 0 .67-.21 2.2.82.64-.18 1.32-.27 2-.27.68 0 1.36.09 2 .27 1.53-1.04 2.2-.82 2.2-.82.44 1.1.16 1.92.08 2.12.51.56.82 1.27.82 2.15 0 3.07-1.87 3.75-3.65 3.95.29.25.54.73.54 1.48 0 1.07-.01 1.93-.01 2.2 0 .21.15.46.55.38A8.01 8.01 0 0 0 16 8c0-4.42-3.58-8-8-8z"/></svg>
@@ -40,7 +41,7 @@
 
     <div class="legal-body">
       <h2>一句话总结</h2>
-      <p>PiPanel 不收集、不上传、不与任何人分享你的任何数据。它是一个完全本地运行的 macOS 应用，没有账号系统、没有统计分析、没有崩溃上报、不联网。你可以在 <a href="https://github.com/Lyle-xub/PiPanel" target="_blank" rel="noopener">GitHub 上查看完整源代码</a>来验证这一点。</p>
+      <p>PiPanel 不收集、不上传、不与任何人分享你的使用数据。核心画中画功能完全本地运行，没有账号系统、没有统计分析、没有崩溃上报。唯一会联网的场景是购买和验证付费授权，这部分数据由第三方支付处理商 Creem 处理，见下方「购买与授权验证」章节。核心功能的代码<a href="https://github.com/Lyle-xub/PiPanel" target="_blank" rel="noopener">公开托管在 GitHub 上</a>，可以自行验证。</p>
 
       <h2>App 需要哪些系统权限，用来做什么</h2>
       <p>PiPanel 在首次使用时会请求以下两项 macOS 系统权限，两者都只在你的 Mac 本地生效，不会把任何内容发送到外部服务器：</p>
@@ -53,7 +54,15 @@
       <p>PiPanel 会把你的偏好设置（例如画面帧率、默认尺寸、外观选项等）保存在 macOS 标准的本地偏好设置（UserDefaults）中，仅存在于你自己的 Mac 上，不会同步到任何账号或云端。</p>
 
       <h2>网络请求</h2>
-      <p>PiPanel 的开源版本不发起任何网络请求，没有统计分析（analytics）、没有崩溃报告工具、没有广告 SDK，也没有任何形式的遥测（telemetry）。</p>
+      <p>PiPanel 的开源版本（公开在 GitHub 上的核心代码）不发起任何网络请求，没有统计分析（analytics）、没有崩溃报告工具、没有广告 SDK，也没有任何形式的遥测（telemetry）。正式发布的 App 额外包含一个未开源的付费授权模块，只在你主动购买或激活授权时才会联网，具体见下一节。</p>
+
+      <h2>购买与授权验证</h2>
+      <p>如果你购买了付费授权，PiPanel 会在以下场景联网：</p>
+      <ul>
+        <li><strong>购买时</strong>：点击购买会跳转到第三方支付与授权处理商 <a href="https://creem.io" target="_blank" rel="noopener">Creem</a> 的结算页面完成付款。你的支付信息（卡号、账单地址等）由 Creem 直接收集和处理，PiPanel 和开发者都不会接触到这些信息，具体以 Creem 自身的隐私政策为准。</li>
+        <li><strong>激活/验证授权码时</strong>：App 会把你输入的授权码和一个本机生成的设备标识符发送给 Creem 的服务器，用来确认授权有效并绑定到你的设备。设备标识符和授权码保存在 macOS 的 Keychain 中，仅用于这个用途。</li>
+      </ul>
+      <p>除上述两个场景外，PiPanel 不会发起其他任何网络请求。</p>
 
       <h2>关于这个网站</h2>
       <p>本网站（<a href="https://lyle-xub.github.io/PiPanel/" target="_blank" rel="noopener">lyle-xub.github.io/PiPanel</a>）托管在 GitHub Pages 上，本身不包含任何统计分析脚本。GitHub 作为托管方可能会按照其自身的隐私政策记录基础的访问日志（例如 IP 地址），这部分由 <a href="https://docs.github.com/en/site-policy/privacy-policies/github-general-privacy-statement" target="_blank" rel="noopener">GitHub 官方隐私声明</a>约束，与开发者无关。</p>
@@ -66,13 +75,17 @@
 
 <footer>
   <div class="wrap">
-    <p>PiPanel 是一个个人开源项目，与 Apple 官方无关。</p>
+    <p>PiPanel 由 lylexub 独立开发，与 Apple 官方无关。</p>
     <p style="margin-top:6px;">
       <a href="index.html">首页</a>
       ·
-      <a href="privacy.html">隐私政策</a>
+      <a href="mailto:support@pipanel.app">Support</a>
       ·
-      <a href="terms.html">使用条款</a>
+      <a href="privacy.html">Privacy</a>
+      ·
+      <a href="terms.html">Terms</a>
+      ·
+      <a href="refund.html">Refund Policy</a>
       ·
       <a href="https://github.com/Lyle-xub/PiPanel" target="_blank" rel="noopener">GitHub</a>
     </p>
