@@ -7,18 +7,18 @@
 <meta name="description" content="AnyPiP 是一个 macOS 菜单栏应用，可以把任意窗口拖拽成可移动、可缩放、可交互的画中画悬浮窗。开源、免费、原生体验。">
 <style>
   :root{
-    --bg:#08090c;
-    --bg-2:#0d0f14;
-    --surface:#12141b;
-    --surface-2:#181b24;
-    --border:rgba(255,255,255,.08);
-    --border-strong:rgba(255,255,255,.16);
-    --text:#f2f3f5;
-    --text-dim:#9a9ea8;
-    --text-dimmer:#6b7078;
-    --accent:#7c8cff;
-    --accent-2:#c46bff;
-    --accent-3:#4fd6c9;
+    --bg:#ffffff;
+    --bg-2:#f5f5f7;
+    --surface:#ffffff;
+    --surface-2:#f5f5f7;
+    --border:rgba(0,0,0,.07);
+    --border-strong:rgba(0,0,0,.12);
+    --text:#1d1d1f;
+    --text-dim:#6e6e73;
+    --text-dimmer:#86868b;
+    --accent:#0071e3;
+    --accent-2:#5e5ce6;
+    --accent-3:#00b4a6;
     --radius:20px;
   }
   *{box-sizing:border-box;}
@@ -49,8 +49,8 @@
   .blob{
     position:absolute;
     border-radius:50%;
-    filter:blur(90px);
-    opacity:.55;
+    filter:blur(110px);
+    opacity:.28;
     will-change:transform;
   }
   .blob-1{
@@ -88,7 +88,7 @@
     position:fixed;
     width:420px;height:420px;
     border-radius:50%;
-    background:radial-gradient(circle, rgba(124,140,255,.10), transparent 70%);
+    background:radial-gradient(circle, rgba(0,113,227,.06), transparent 70%);
     pointer-events:none;
     z-index:1;
     transform:translate(-50%,-50%);
@@ -114,7 +114,7 @@
     border-bottom:1px solid transparent;
   }
   nav.scrolled{
-    background-color:rgba(8,9,12,.72);
+    background-color:rgba(255,255,255,.78);
     backdrop-filter:blur(16px) saturate(160%);
     -webkit-backdrop-filter:blur(16px) saturate(160%);
     border-bottom-color:var(--border);
@@ -137,7 +137,7 @@
     border-radius:9px;
     background:linear-gradient(135deg, var(--accent), var(--accent-2));
     display:flex;align-items:center;justify-content:center;
-    box-shadow:0 4px 16px rgba(124,140,255,.35);
+    box-shadow:0 4px 16px rgba(0,113,227,.28);
   }
   .brand-mark svg{width:16px;height:16px;}
   .nav-links{
@@ -160,7 +160,7 @@
     font-weight:600;
     transition:border-color .2s ease, background-color .2s ease, transform .2s ease;
   }
-  .nav-cta:hover{background-color:rgba(255,255,255,.06);transform:translateY(-1px);}
+  .nav-cta:hover{background-color:rgba(0,0,0,.04);transform:translateY(-1px);}
   @media (max-width:720px){ .nav-links a:not(.nav-cta){display:none;} }
 
   /* ---------- hero ---------- */
@@ -175,7 +175,7 @@
     padding:6px 14px;
     border-radius:999px;
     border:1px solid var(--border-strong);
-    background:rgba(124,140,255,.08);
+    background:rgba(0,113,227,.06);
     font-size:12.5px;
     color:var(--text-dim);
     opacity:0;
@@ -184,13 +184,13 @@
   .eyebrow .dot{
     width:6px;height:6px;border-radius:50%;
     background:var(--accent-3);
-    box-shadow:0 0 0 0 rgba(79,214,201,.6);
+    box-shadow:0 0 0 0 rgba(0,180,166,.6);
     animation:pulse 2s ease-in-out infinite;
   }
   @keyframes pulse{
-    0%{box-shadow:0 0 0 0 rgba(79,214,201,.5);}
-    70%{box-shadow:0 0 0 8px rgba(79,214,201,0);}
-    100%{box-shadow:0 0 0 0 rgba(79,214,201,0);}
+    0%{box-shadow:0 0 0 0 rgba(0,180,166,.5);}
+    70%{box-shadow:0 0 0 8px rgba(0,180,166,0);}
+    100%{box-shadow:0 0 0 0 rgba(0,180,166,0);}
   }
   h1.headline{
     margin:26px auto 0;
@@ -249,15 +249,15 @@
   .btn-primary{
     background:linear-gradient(135deg, var(--accent), var(--accent-2));
     color:#fff;
-    box-shadow:0 10px 30px -8px rgba(124,140,255,.55);
+    box-shadow:0 10px 26px -8px rgba(0,113,227,.45);
   }
-  .btn-primary:hover{transform:translateY(-2px) scale(1.02);box-shadow:0 16px 36px -8px rgba(124,140,255,.65);}
+  .btn-primary:hover{transform:translateY(-2px) scale(1.02);box-shadow:0 16px 32px -8px rgba(0,113,227,.55);}
   .btn-ghost{
-    background:rgba(255,255,255,.04);
+    background:rgba(0,0,0,.03);
     border:1px solid var(--border-strong);
     color:var(--text);
   }
-  .btn-ghost:hover{background:rgba(255,255,255,.08);transform:translateY(-2px);}
+  .btn-ghost:hover{background:rgba(0,0,0,.05);transform:translateY(-2px);}
   .btn svg{width:16px;height:16px;}
 
   /* ---------- hero demo (animated PiP illustration) ---------- */
@@ -269,32 +269,32 @@
     border-radius:24px;
     border:1px solid var(--border);
     background:
-      radial-gradient(circle at 20% 15%, rgba(124,140,255,.10), transparent 45%),
-      radial-gradient(circle at 85% 80%, rgba(196,107,255,.10), transparent 45%),
+      radial-gradient(circle at 20% 15%, rgba(0,113,227,.07), transparent 45%),
+      radial-gradient(circle at 85% 80%, rgba(94,92,230,.07), transparent 45%),
       linear-gradient(180deg, var(--surface), var(--bg-2));
     overflow:hidden;
     opacity:0;
     animation:rise 1s ease .34s forwards;
-    box-shadow:0 40px 80px -30px rgba(0,0,0,.6);
+    box-shadow:0 40px 80px -32px rgba(0,0,0,.16);
   }
   .demo-stage::before{
     content:"";
     position:absolute;inset:0;
     background-image:
-      linear-gradient(to right, rgba(255,255,255,.035) 1px, transparent 1px),
-      linear-gradient(to bottom, rgba(255,255,255,.035) 1px, transparent 1px);
+      linear-gradient(to right, rgba(0,0,0,.035) 1px, transparent 1px),
+      linear-gradient(to bottom, rgba(0,0,0,.035) 1px, transparent 1px);
     background-size:36px 36px;
     mask-image:radial-gradient(circle at 50% 40%, black, transparent 75%);
   }
   .menubar{
     position:absolute;top:0;left:0;right:0;height:34px;
-    background:rgba(255,255,255,.03);
+    background:rgba(0,0,0,.02);
     border-bottom:1px solid var(--border);
     display:flex;align-items:center;
     padding:0 16px;
     gap:8px;
   }
-  .menubar .traffic{width:8px;height:8px;border-radius:50%;background:rgba(255,255,255,.15);}
+  .menubar .traffic{width:8px;height:8px;border-radius:50%;background:rgba(0,0,0,.14);}
   .menubar .pip-icon{
     margin-left:auto;
     width:16px;height:16px;
@@ -307,9 +307,9 @@
     top:78px;left:64px;
     width:300px;height:200px;
     border-radius:12px;
-    background:var(--surface-2);
+    background:#ffffff;
     border:1px solid var(--border-strong);
-    box-shadow:0 20px 45px -20px rgba(0,0,0,.7);
+    box-shadow:0 20px 45px -22px rgba(0,0,0,.22);
     animation:sourceLoop 7s cubic-bezier(.65,0,.35,1) infinite;
   }
   .source-window .titlebar{
@@ -318,9 +318,9 @@
     padding:0 12px;
     border-bottom:1px solid var(--border);
   }
-  .source-window .titlebar span{width:7px;height:7px;border-radius:50%;background:rgba(255,255,255,.18);}
+  .source-window .titlebar span{width:7px;height:7px;border-radius:50%;background:rgba(0,0,0,.15);}
   .source-window .body{padding:14px;display:flex;flex-direction:column;gap:8px;}
-  .source-window .line{height:8px;border-radius:5px;background:rgba(255,255,255,.08);}
+  .source-window .line{height:8px;border-radius:5px;background:rgba(0,0,0,.07);}
   .source-window .line.w1{width:70%;}
   .source-window .line.w2{width:90%;}
   .source-window .line.w3{width:55%;}
@@ -337,9 +337,9 @@
     right:36px;bottom:30px;
     width:190px;height:126px;
     border-radius:14px;
-    background:var(--surface-2);
-    border:1px solid rgba(255,255,255,.22);
-    box-shadow:0 25px 60px -20px rgba(124,140,255,.45), 0 0 0 1px rgba(255,255,255,.03);
+    background:#ffffff;
+    border:1px solid rgba(0,0,0,.08);
+    box-shadow:0 25px 55px -20px rgba(0,113,227,.30), 0 0 0 1px rgba(0,0,0,.02);
     overflow:hidden;
     animation:pipLoop 7s cubic-bezier(.65,0,.35,1) infinite;
   }
@@ -348,18 +348,18 @@
     padding:12px;
     display:flex;flex-direction:column;gap:7px;
   }
-  .pip-panel .line{height:6px;border-radius:4px;background:rgba(255,255,255,.14);}
+  .pip-panel .line{height:6px;border-radius:4px;background:rgba(0,0,0,.09);}
   .pip-panel .glow{
     position:absolute;inset:0;
-    background:linear-gradient(135deg, rgba(124,140,255,.16), rgba(196,107,255,.10));
+    background:linear-gradient(135deg, rgba(0,113,227,.12), rgba(94,92,230,.08));
     opacity:0;
     animation:pipFlash 7s ease infinite;
   }
   .pip-panel .resize-handle{
     position:absolute;right:6px;bottom:6px;
     width:10px;height:10px;
-    border-right:2px solid rgba(255,255,255,.35);
-    border-bottom:2px solid rgba(255,255,255,.35);
+    border-right:2px solid rgba(0,0,0,.25);
+    border-bottom:2px solid rgba(0,0,0,.25);
     border-radius:0 0 3px 0;
   }
   @keyframes pipLoop{
@@ -378,8 +378,8 @@
     position:absolute;
     width:14px;height:14px;
     border-radius:50%;
-    background:#fff;
-    box-shadow:0 0 0 4px rgba(255,255,255,.15), 0 4px 14px rgba(0,0,0,.4);
+    background:var(--text);
+    box-shadow:0 0 0 4px rgba(255,255,255,.9), 0 4px 14px rgba(0,0,0,.22);
     animation:cursorLoop 7s cubic-bezier(.65,0,.35,1) infinite;
   }
   @keyframes cursorLoop{
@@ -472,13 +472,13 @@
   @media (hover:hover){
     .card:hover{
       border-color:var(--border-strong);
-      box-shadow:0 24px 50px -24px rgba(0,0,0,.6);
+      box-shadow:0 24px 50px -28px rgba(0,0,0,.18);
     }
   }
   .card::before{
     content:"";
     position:absolute;inset:0;
-    background:radial-gradient(320px circle at var(--mx,50%) var(--my,0%), rgba(124,140,255,.14), transparent 60%);
+    background:radial-gradient(320px circle at var(--mx,50%) var(--my,0%), rgba(0,113,227,.08), transparent 60%);
     opacity:0;
     transition:opacity .35s ease;
     pointer-events:none;
@@ -488,7 +488,7 @@
     width:42px;height:42px;
     border-radius:11px;
     display:flex;align-items:center;justify-content:center;
-    background:linear-gradient(135deg, rgba(124,140,255,.18), rgba(196,107,255,.14));
+    background:linear-gradient(135deg, rgba(0,113,227,.12), rgba(94,92,230,.10));
     border:1px solid var(--border-strong);
     margin-bottom:16px;
   }
@@ -538,9 +538,9 @@
     padding:56px 40px;
     text-align:center;
     background:
-      radial-gradient(circle at 15% 20%, rgba(124,140,255,.16), transparent 45%),
-      radial-gradient(circle at 85% 80%, rgba(196,107,255,.14), transparent 45%),
-      var(--surface);
+      radial-gradient(circle at 15% 20%, rgba(0,113,227,.08), transparent 45%),
+      radial-gradient(circle at 85% 80%, rgba(94,92,230,.07), transparent 45%),
+      var(--bg-2);
     border:1px solid var(--border);
     position:relative;
     overflow:hidden;
