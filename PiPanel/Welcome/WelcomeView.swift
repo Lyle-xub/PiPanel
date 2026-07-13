@@ -227,7 +227,7 @@ struct WelcomeView: View {
             WelcomeLogoMark(isVisible: hasEntered)
                 .frame(width: 156, height: 156)
             Spacer(minLength: 18)
-            Text("AnyPiP")
+            Text("PiPanel")
                 .font(.system(size: 28, weight: .semibold, design: .serif))
                 .opacity(hasEntered ? 1 : 0)
                 .offset(y: hasEntered ? 0 : 10)

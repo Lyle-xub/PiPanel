@@ -16,7 +16,7 @@ final class LaunchAtLoginManager: ObservableObject {
 
     private init() {
         refresh()
-        // Catches the user adding/removing the login item externally while AnyPiP wasn't
+        // Catches the user adding/removing the login item externally while PiPanel wasn't
         // frontmost — same rationale as PermissionsManager's use of this notification for
         // TCC permissions granted while the app was in the background.
         NotificationCenter.default.addObserver(

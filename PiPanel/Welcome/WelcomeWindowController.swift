@@ -9,7 +9,7 @@ private final class WelcomeWindow: NSWindow {
     override var canBecomeKey: Bool { true }
 }
 
-/// Owns the first-launch welcome window. AnyPiP is LSUIElement (no Dock icon, no app menu), so
+/// Owns the first-launch welcome window. PiPanel is LSUIElement (no Dock icon, no app menu), so
 /// this is the one moment the app needs to actively grab focus and put a real, focusable window
 /// in front of the user rather than waiting for them to click the status item — everything after
 /// this is menu-bar-driven.
@@ -69,7 +69,7 @@ final class WelcomeWindowController: NSWindowController {
             window.orderOut(nil)
             window.contentView = nil
             // Back to an accessory app once the one moment that needed a frontmost, focusable
-            // window is over — otherwise AnyPiP would keep an unwanted Dock icon/app menu forever.
+            // window is over — otherwise PiPanel would keep an unwanted Dock icon/app menu forever.
             NSApp.setActivationPolicy(.accessory)
         })
     }

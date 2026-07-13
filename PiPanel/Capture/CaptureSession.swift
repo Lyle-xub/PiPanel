@@ -106,7 +106,7 @@ final class CaptureSession: NSObject {
     var suppressNextActivationTransition = false
 
     private var stream: SCStream?
-    private let sampleQueue = DispatchQueue(label: "com.anypip.mac.capture.sampleQueue")
+    private let sampleQueue = DispatchQueue(label: "com.pipanel.mac.capture.sampleQueue")
     private var lastFrameDate = Date()
     private var stallTimer: DispatchSourceTimer?
     /// Keeps the crop in sync with the window's live frame for as long as the session is
@@ -177,7 +177,7 @@ final class CaptureSession: NSObject {
             guard let host = VirtualDisplayHost(
                 pixelWidth: VirtualDisplayHost.maxPixelsWide,
                 pixelHeight: VirtualDisplayHost.maxPixelsHigh,
-                name: "AnyPiP – \(windowInfo.ownerAppName)"
+                name: "PiPanel – \(windowInfo.ownerAppName)"
             ) else {
                 throw CaptureSessionError.virtualDisplayCreationFailed
             }
@@ -200,7 +200,7 @@ final class CaptureSession: NSObject {
         try await stream.startCapture()
         self.stream = stream
         startStallWatchdog()
-        AnyPiPLogger.capture.info("Capture started for window \(self.windowInfo.id) (\(self.windowInfo.ownerAppName)) via virtual display \(host.displayID)")
+        PiPanelLogger.capture.info("Capture started for window \(self.windowInfo.id) (\(self.windowInfo.ownerAppName)) via virtual display \(host.displayID)")
     }
 
     /// Moves the window onto the virtual display and updates framedRect to match its real
@@ -332,7 +332,7 @@ final class CaptureSession: NSObject {
                 try await self.moveWindowOntoVirtualDisplay(host: host, axWindow: axWindow, size: self.currentPiPSize)
                 try await self.applyConfiguration()
             } catch {
-                AnyPiPLogger.capture.error("Failed to re-anchor window \(self.windowInfo.id) after display reconfiguration: \(error)")
+                PiPanelLogger.capture.error("Failed to re-anchor window \(self.windowInfo.id) after display reconfiguration: \(error)")
             }
         }
     }
@@ -362,7 +362,7 @@ final class CaptureSession: NSObject {
             presentationState = .pip
             startFrameWatch(axWindow: axWindow, host: host)
         } catch {
-            AnyPiPLogger.capture.error("Failed to resume PiP for window \(self.windowInfo.id): \(error)")
+            PiPanelLogger.capture.error("Failed to resume PiP for window \(self.windowInfo.id): \(error)")
         }
     }
 
@@ -655,7 +655,7 @@ final class CaptureSession: NSObject {
         }
         restoreWindowIfNeeded()
         virtualDisplayHost = nil // deallocating tears the virtual display down
-        AnyPiPLogger.capture.info("Capture stopped for window \(self.windowInfo.id)")
+        PiPanelLogger.capture.info("Capture stopped for window \(self.windowInfo.id)")
     }
 
     /// Moves the source window back to its pre-session position — used both on session stop and
@@ -717,7 +717,7 @@ final class CaptureSession: NSObject {
         timer.setEventHandler { [weak self] in
             guard let self else { return }
             if Date().timeIntervalSince(self.lastFrameDate) > 3 {
-                AnyPiPLogger.capture.warning("No frames received for 3s+ for window \(self.windowInfo.id)")
+                PiPanelLogger.capture.warning("No frames received for 3s+ for window \(self.windowInfo.id)")
             }
         }
         timer.resume()
@@ -743,7 +743,7 @@ extension CaptureSession: SCStreamOutput {
 
 extension CaptureSession: SCStreamDelegate {
     func stream(_ stream: SCStream, didStopWithError error: Error) {
-        AnyPiPLogger.capture.error("Stream stopped with error: \(error.localizedDescription)")
+        PiPanelLogger.capture.error("Stream stopped with error: \(error.localizedDescription)")
         delegate?.captureSessionDidStop(self, error: error)
     }
 }

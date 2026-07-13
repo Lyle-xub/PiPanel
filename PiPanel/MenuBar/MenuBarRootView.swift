@@ -39,7 +39,7 @@ struct MenuBarRootView: View {
                 }
 
             VStack(alignment: .leading, spacing: 1) {
-                Text("AnyPiP")
+                Text("PiPanel")
                     .font(.system(size: 13, weight: .semibold))
                 Text(headerSubtitle)
                     .font(.system(size: 11))
@@ -69,7 +69,7 @@ struct MenuBarRootView: View {
             Button(role: .destructive) {
                 NSApplication.shared.terminate(nil)
             } label: {
-                Label("退出 AnyPiP", systemImage: "power")
+                Label("退出 PiPanel", systemImage: "power")
             }
             .buttonStyle(FooterButtonStyle(tint: .red))
         }
@@ -83,7 +83,7 @@ private struct PermissionsBannerView: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 10) {
-            Label("需要以下权限才能使用 AnyPiP", systemImage: "lock.shield")
+            Label("需要以下权限才能使用 PiPanel", systemImage: "lock.shield")
                 .font(.system(size: 12, weight: .semibold))
                 .foregroundStyle(.secondary)
 

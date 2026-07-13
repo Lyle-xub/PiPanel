@@ -36,7 +36,7 @@ final class Runner: NSObject, SCStreamOutput, SCStreamDelegate {
     }
 }
 
-// -1. Replicate AnyPiP's PiPPanelController: an elevated-level NSPanel already on screen
+// -1. Replicate PiPanel's PiPPanelController: an elevated-level NSPanel already on screen
 //     BEFORE the virtual display is created, to test whether that's what breaks discovery.
 let testPanel = NSPanel(
     contentRect: NSRect(x: 100, y: 100, width: 200, height: 150),
@@ -55,7 +55,7 @@ testPanel.isMovableByWindowBackground = true
 testPanel.orderFrontRegardless()
 print("Test panel ordered front")
 
-// 0. Replicate AnyPiP's ordering: enumerate shareable content BEFORE the virtual display exists,
+// 0. Replicate PiPanel's ordering: enumerate shareable content BEFORE the virtual display exists,
 //    to test whether that "poisons" a per-process cache that later calls can't see past.
 let earlySemaphore = DispatchSemaphore(value: 0)
 Task {
@@ -67,7 +67,7 @@ earlySemaphore.wait()
 
 // 1. Create the virtual display.
 let descriptor = CGVirtualDisplayDescriptor()
-descriptor.name = "AnyPiP Virtual Display"
+descriptor.name = "PiPanel Virtual Display"
 descriptor.maxPixelsWide = 1280
 descriptor.maxPixelsHigh = 800
 descriptor.sizeInMillimeters = CGSize(width: 300, height: 190)

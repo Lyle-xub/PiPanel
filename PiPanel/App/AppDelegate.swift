@@ -4,7 +4,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     func applicationDidFinishLaunching(_ notification: Notification) {
         debugTrace("applicationDidFinishLaunching START")
         NSApp.setActivationPolicy(.accessory)
-        AnyPiPLogger.app.info("AnyPiP launched")
+        PiPanelLogger.app.info("PiPanel launched")
         debugTrace("applicationDidFinishLaunching: policy set, calling debugAutostartIfRequested")
         debugAutostartIfRequested()
 
@@ -15,12 +15,12 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         }
     }
 
-    /// Dev-only hook: set ANYPIP_DEBUG_AUTOSTART=<comma-separated app name substrings> to
+    /// Dev-only hook: set PIPANEL_DEBUG_AUTOSTART=<comma-separated app name substrings> to
     /// auto-start a PiP session per match without going through the picker UI — used for
     /// milestone verification, including starting multiple sessions at once (M4). No-ops unless
     /// the env var is set.
     private func debugAutostartIfRequested() {
-        guard let raw = ProcessInfo.processInfo.environment["ANYPIP_DEBUG_AUTOSTART"], !raw.isEmpty else {
+        guard let raw = ProcessInfo.processInfo.environment["PIPANEL_DEBUG_AUTOSTART"], !raw.isEmpty else {
             return
         }
         let needles = raw.split(separator: ",").map { $0.trimmingCharacters(in: .whitespaces) }

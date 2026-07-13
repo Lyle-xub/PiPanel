@@ -1,5 +1,5 @@
 import XCTest
-@testable import AnyPiP
+@testable import PiPanel
 
 final class CoordinateTranslatorTests: XCTestCase {
     func testCenterClickMapsToWindowCenter() {

@@ -15,7 +15,7 @@ import ApplicationServices
 /// Accessibility permission, but resolving *which* window is under the cursor and its live frame
 /// goes through the same Accessibility APIs AXWindowLocator already depends on — so this quietly
 /// no-ops until that permission is granted, same as every other AX-dependent path in the app.
-/// Every rejection point below logs why, via AnyPiPLogger.interaction — this gesture has no other
+/// Every rejection point below logs why, via PiPanelLogger.interaction — this gesture has no other
 /// feedback (unlike a click, there's no failed-click affordance), so when it doesn't fire, the log
 /// is the only way to tell whether the speed threshold or the WindowInfo match is what rejected
 /// it.
@@ -65,7 +65,7 @@ final class WindowFlingDetector {
         mouseUpMonitor = NSEvent.addGlobalMonitorForEvents(matching: .leftMouseUp) { [weak self] event in
             self?.handleMouseUp(event)
         }
-        AnyPiPLogger.interaction.debug("WindowFlingDetector started")
+        PiPanelLogger.interaction.debug("WindowFlingDetector started")
     }
 
     func stop() {
@@ -96,7 +96,7 @@ final class WindowFlingDetector {
         // (which the OS won't actually move the window for) is still tracked; it just won't cross
         // the speed threshold unless the window is actually being thrown around.
         guard let axWindow = Self.enclosingWindow(of: element) else {
-            AnyPiPLogger.interaction.debug("Fling: mouseDown hit element has no enclosing AXWindow")
+            PiPanelLogger.interaction.debug("Fling: mouseDown hit element has no enclosing AXWindow")
             return
         }
 
@@ -104,7 +104,7 @@ final class WindowFlingDetector {
         guard AXUIElementGetPid(axWindow, &pid) == .success, pid != ProcessInfo.processInfo.processIdentifier else { return }
 
         tracking = Tracking(axWindow: axWindow, pid: pid, samples: [(quartzPoint, event.timestamp)])
-        AnyPiPLogger.interaction.debug("Fling: tracking started for pid \(pid)")
+        PiPanelLogger.interaction.debug("Fling: tracking started for pid \(pid)")
     }
 
     private func handleMouseDragged(_ event: NSEvent) {
@@ -140,7 +140,7 @@ final class WindowFlingDetector {
         }
         let speed = totalDistance / dt
         let reversals = Self.reversalCount(in: path)
-        AnyPiPLogger.interaction.debug("Fling: accumulated speed \(speed, format: .fixed(precision: 0)) pt/s (threshold \(Self.flingVelocityThreshold, format: .fixed(precision: 0))), \(reversals) reversal(s) (need \(Self.minReversals))")
+        PiPanelLogger.interaction.debug("Fling: accumulated speed \(speed, format: .fixed(precision: 0)) pt/s (threshold \(Self.flingVelocityThreshold, format: .fixed(precision: 0))), \(reversals) reversal(s) (need \(Self.minReversals))")
         guard speed >= Self.flingVelocityThreshold, reversals >= Self.minReversals else { return }
 
         let axWindow = tracking.axWindow
@@ -156,18 +156,18 @@ final class WindowFlingDetector {
     private func attemptStartSession(axWindow: AXUIElement, pid: pid_t) async {
         guard let quartzFrame = AXWindowLocator.frame(of: axWindow) else { return }
         guard let candidates = try? await WindowEnumerator.listPiPCandidateWindows() else {
-            AnyPiPLogger.interaction.debug("Fling: WindowEnumerator lookup failed (screen recording permission?)")
+            PiPanelLogger.interaction.debug("Fling: WindowEnumerator lookup failed (screen recording permission?)")
             return
         }
         let match = candidates
             .filter { $0.ownerPID == pid }
             .min { Self.distance($0.frame, quartzFrame) < Self.distance($1.frame, quartzFrame) }
         guard let windowInfo = match, Self.distance(windowInfo.frame, quartzFrame) < 60 else {
-            AnyPiPLogger.interaction.debug("Fling: no WindowInfo matched pid \(pid) within tolerance")
+            PiPanelLogger.interaction.debug("Fling: no WindowInfo matched pid \(pid) within tolerance")
             return
         }
 
-        AnyPiPLogger.interaction.debug("Fling: starting PiP session for \(windowInfo.title)")
+        PiPanelLogger.interaction.debug("Fling: starting PiP session for \(windowInfo.title)")
         onFling?(windowInfo)
     }
 

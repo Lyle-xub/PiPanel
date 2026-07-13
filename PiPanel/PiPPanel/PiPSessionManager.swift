@@ -57,7 +57,7 @@ final class PiPSessionManager: NSObject, ObservableObject {
     func startSession(for windowInfo: WindowInfo) {
         debugTrace("startSession(for:) called for \(windowInfo.ownerAppName)/\(windowInfo.title)")
         if sessions.contains(where: { $0.windowInfo.id == windowInfo.id }) {
-            AnyPiPLogger.app.info("Session already active for window \(windowInfo.id)")
+            PiPanelLogger.app.info("Session already active for window \(windowInfo.id)")
             return
         }
 
@@ -165,7 +165,7 @@ extension PiPSessionManager: CaptureSessionDelegate {
     nonisolated func captureSessionDidStop(_ session: CaptureSession, error: Error?) {
         Task { @MainActor in
             guard let pipSession = self.sessionsByCaptureSession[ObjectIdentifier(session)] else { return }
-            AnyPiPLogger.app.info("Source window disappeared, closing PiP panel")
+            PiPanelLogger.app.info("Source window disappeared, closing PiP panel")
             self.stopSession(pipSession)
         }
     }

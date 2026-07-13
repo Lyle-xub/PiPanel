@@ -16,7 +16,7 @@ enum WindowEnumerator {
                 onScreenWindowsOnly: false
             )
         } catch {
-            AnyPiPLogger.capture.error("Failed to enumerate windows: \(error.localizedDescription)")
+            PiPanelLogger.capture.error("Failed to enumerate windows: \(error.localizedDescription)")
             throw WindowEnumeratorError.noScreenRecordingAccess
         }
 

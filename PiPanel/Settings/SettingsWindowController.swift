@@ -1,7 +1,7 @@
 import AppKit
 import SwiftUI
 
-/// Owns the standalone Settings window. AnyPiP is LSUIElement (no Dock icon, no app menu) driven
+/// Owns the standalone Settings window. PiPanel is LSUIElement (no Dock icon, no app menu) driven
 /// entirely from the menu bar — like WelcomeWindowController, this is a moment the app needs to
 /// temporarily become a regular, focusable app so a real window can come to the front.
 ///
@@ -23,7 +23,7 @@ final class SettingsWindowController: NSWindowController, NSWindowDelegate {
             backing: .buffered,
             defer: false
         )
-        window.title = "AnyPiP 设置"
+        window.title = "PiPanel 设置"
         window.minSize = NSSize(width: 480, height: 360)
         window.isReleasedWhenClosed = false
         window.center()
@@ -58,7 +58,7 @@ final class SettingsWindowController: NSWindowController, NSWindowDelegate {
     func windowWillClose(_ notification: Notification) {
         window?.contentView = nil
         // Back to an accessory app once the one moment that needed a frontmost, focusable window
-        // is over — otherwise AnyPiP would keep an unwanted Dock icon/app menu forever.
+        // is over — otherwise PiPanel would keep an unwanted Dock icon/app menu forever.
         NSApp.setActivationPolicy(.accessory)
     }
 }

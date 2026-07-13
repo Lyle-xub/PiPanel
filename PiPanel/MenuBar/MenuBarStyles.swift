@@ -14,7 +14,7 @@ struct SubtleIconButtonStyle: ButtonStyle {
     }
 }
 
-/// Footer action buttons (设置/退出 AnyPiP) — icon + label with a hover/press background rather
+/// Footer action buttons (设置/退出 PiPanel) — icon + label with a hover/press background rather
 /// than a bordered button, reading as a lightweight toolbar instead of a stack of form buttons.
 struct FooterButtonStyle: ButtonStyle {
     var tint: Color = .primary

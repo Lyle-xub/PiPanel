@@ -1,0 +1,640 @@
+// !$*UTF8*$!
+{
+	archiveVersion = 1;
+	classes = {
+	};
+	objectVersion = 77;
+	objects = {
+
+/* Begin PBXBuildFile section */
+		02AAF3628837E1EE1924BFCB /* PiPPanelController.swift in Sources */ = {isa = PBXBuildFile; fileRef = C186E5F512EE94DC8DA476B3 /* PiPPanelController.swift */; };
+		03B56D060B9A2F0F14B4D986 /* Assets.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = F0696A05B45A15E460D3AA48 /* Assets.xcassets */; };
+		0B8C3FCFB71087EDD9E81B02 /* WindowInfo.swift in Sources */ = {isa = PBXBuildFile; fileRef = FD9085AD9052FD4C268EDDA3 /* WindowInfo.swift */; };
+		1C27EF5D00168DA3CC1A8F1E /* CaptureSession.swift in Sources */ = {isa = PBXBuildFile; fileRef = D11F15A32477424D62C95175 /* CaptureSession.swift */; };
+		1DBC041842424F04822582CE /* GeneralSettingsView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 119841F9F3BA8A23D9938924 /* GeneralSettingsView.swift */; };
+		20D76CB6E7023A111237EEEF /* PiPVideoLayerView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 80E70584590638979CC31A8A /* PiPVideoLayerView.swift */; };
+		252941BD0CD2702D8EB0AFB7 /* WindowPickerView.swift in Sources */ = {isa = PBXBuildFile; fileRef = D0B6589E428C200EE4971012 /* WindowPickerView.swift */; };
+		2AF60B85EA5524A2D53DE22A /* MenuBarRootView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 474055F2E7E46A05EBEC83D9 /* MenuBarRootView.swift */; };
+		3225CE96E39EA8CE73DFE051 /* PiPSession.swift in Sources */ = {isa = PBXBuildFile; fileRef = 9A76EFBF8FD44E1E71621D23 /* PiPSession.swift */; };
+		3EC62351DBC4C0DC45F2C51C /* CoordinateTranslator.swift in Sources */ = {isa = PBXBuildFile; fileRef = B3CCE990B5093D986BB8F57E /* CoordinateTranslator.swift */; };
+		45B06208B398338BD705E258 /* PiPanelLogger.swift in Sources */ = {isa = PBXBuildFile; fileRef = 01AF7CBFFD520347D21462D6 /* PiPanelLogger.swift */; };
+		4E64DA6382A473092D6FCD1D /* PiPanelApp.swift in Sources */ = {isa = PBXBuildFile; fileRef = FDCB8A7CB694BAFF15CE8B93 /* PiPanelApp.swift */; };
+		55BECB6E817A6EC8492D9242 /* LaunchAtLoginManager.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1508405894A3D2BE5E9BB1E3 /* LaunchAtLoginManager.swift */; };
+		629057B30C4C37780004B6E1 /* PiPSessionManager.swift in Sources */ = {isa = PBXBuildFile; fileRef = B034661F91B867E233A27265 /* PiPSessionManager.swift */; };
+		63408385629F413202896FE4 /* VirtualDisplayHost.swift in Sources */ = {isa = PBXBuildFile; fileRef = C31D745D5A27C0D580018CF2 /* VirtualDisplayHost.swift */; };
+		69A34C7BC13476020F2054E1 /* ActiveSessionsView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 2254693F0D3E7D847875A2CF /* ActiveSessionsView.swift */; };
+		73A28146B7C0632EA4A91B34 /* CloseDropZoneOverlay.swift in Sources */ = {isa = PBXBuildFile; fileRef = F2B5F71CA5B5163761007AFF /* CloseDropZoneOverlay.swift */; };
+		743DB66FCA4ABF64E200BE99 /* SettingsWindowController.swift in Sources */ = {isa = PBXBuildFile; fileRef = 8A240CD1CF25DFB94FB426C5 /* SettingsWindowController.swift */; };
+		7933D1E90281C2C6D8D603C5 /* SettingsStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1CD69719709E1E7474C4AD5F /* SettingsStore.swift */; };
+		79A8875F0C6ECD99D033076C /* PermissionsManager.swift in Sources */ = {isa = PBXBuildFile; fileRef = 2AE897A33A363152CD43C052 /* PermissionsManager.swift */; };
+		8477BBAE331C791896BA1D15 /* PermissionsSettingsView.swift in Sources */ = {isa = PBXBuildFile; fileRef = B5F77E1D746EBEC9425A4C73 /* PermissionsSettingsView.swift */; };
+		864D0147E7D89CA53D4EB971 /* VirtualDisplayCoordinator.swift in Sources */ = {isa = PBXBuildFile; fileRef = EB08EB0D9365F2AD14BDCF09 /* VirtualDisplayCoordinator.swift */; };
+		903533985AD59CE9B69F599D /* PermissionRowView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 2DBE2F5C4EBAAA621DB6BD51 /* PermissionRowView.swift */; };
+		95FCCC359E7975F7ACF06DE2 /* CoordinateTranslatorTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = ACC703C76D283E57E5BF58C5 /* CoordinateTranslatorTests.swift */; };
+		A4438B1846159D1C936750CD /* WindowEnumerator.swift in Sources */ = {isa = PBXBuildFile; fileRef = E57913F3802D17A376FB739D /* WindowEnumerator.swift */; };
+		AF56D06AB0B1949CE9E4EBDE /* SettingsRootView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 6B12C9E01CD0B201608A9CB6 /* SettingsRootView.swift */; };
+		B8FEC6FA1ACC817540FCB560 /* InteractionForwarder.swift in Sources */ = {isa = PBXBuildFile; fileRef = 43DBBC5D91DF4C1A6D2B2EF9 /* InteractionForwarder.swift */; };
+		C3223B3E00385F439AD8C2BB /* MenuBarStyles.swift in Sources */ = {isa = PBXBuildFile; fileRef = E92D9DD0638C3110C40F868C /* MenuBarStyles.swift */; };
+		CA7B8A9CA4578DAAE8D745E8 /* WelcomeWindowController.swift in Sources */ = {isa = PBXBuildFile; fileRef = 324A3B3ABA956FC88838E4DF /* WelcomeWindowController.swift */; };
+		D5255E5810CFBB7DF7352693 /* KeyboardEventForwarder.swift in Sources */ = {isa = PBXBuildFile; fileRef = F827FF6175A7906ABC181B53 /* KeyboardEventForwarder.swift */; };
+		D8E0332628C10AE3D8E30A66 /* AppearanceSettingsView.swift in Sources */ = {isa = PBXBuildFile; fileRef = A1ACE1BA535FB479F51CFFEF /* AppearanceSettingsView.swift */; };
+		DEFF29A2652D7E23DAEDB984 /* AXWindowLocator.swift in Sources */ = {isa = PBXBuildFile; fileRef = A84F5167DDC91215D4F5B670 /* AXWindowLocator.swift */; };
+		EAFDDD9A8DE980507E2FFA7B /* WelcomeView.swift in Sources */ = {isa = PBXBuildFile; fileRef = A173CC0A2B8FB1F32F749F0B /* WelcomeView.swift */; };
+		F00AE3310D1B484EC62CF366 /* WindowFlingDetector.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5FCF3A30E373DE6543200B72 /* WindowFlingDetector.swift */; };
+		F6CD7B0083855040CF2B5D5B /* AppDelegate.swift in Sources */ = {isa = PBXBuildFile; fileRef = 63C6DE386002956685A1E13C /* AppDelegate.swift */; };
+/* End PBXBuildFile section */
+
+/* Begin PBXContainerItemProxy section */
+		923F84549CE6A204E05D7E2F /* PBXContainerItemProxy */ = {
+			isa = PBXContainerItemProxy;
+			containerPortal = 21EA20E0A74045DE2525D691 /* Project object */;
+			proxyType = 1;
+			remoteGlobalIDString = 560C85ED82DFBB8F7E0B0A2B;
+			remoteInfo = PiPanel;
+		};
+/* End PBXContainerItemProxy section */
+
+/* Begin PBXFileReference section */
+		01AF7CBFFD520347D21462D6 /* PiPanelLogger.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PiPanelLogger.swift; sourceTree = "<group>"; };
+		0EA5D849008FFAC85D675A92 /* CGVirtualDisplayPrivate.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; path = CGVirtualDisplayPrivate.h; sourceTree = "<group>"; };
+		119841F9F3BA8A23D9938924 /* GeneralSettingsView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = GeneralSettingsView.swift; sourceTree = "<group>"; };
+		1508405894A3D2BE5E9BB1E3 /* LaunchAtLoginManager.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LaunchAtLoginManager.swift; sourceTree = "<group>"; };
+		1CD69719709E1E7474C4AD5F /* SettingsStore.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SettingsStore.swift; sourceTree = "<group>"; };
+		2254693F0D3E7D847875A2CF /* ActiveSessionsView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ActiveSessionsView.swift; sourceTree = "<group>"; };
+		2AE897A33A363152CD43C052 /* PermissionsManager.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PermissionsManager.swift; sourceTree = "<group>"; };
+		2DBE2F5C4EBAAA621DB6BD51 /* PermissionRowView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PermissionRowView.swift; sourceTree = "<group>"; };
+		324A3B3ABA956FC88838E4DF /* WelcomeWindowController.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WelcomeWindowController.swift; sourceTree = "<group>"; };
+		43DBBC5D91DF4C1A6D2B2EF9 /* InteractionForwarder.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = InteractionForwarder.swift; sourceTree = "<group>"; };
+		474055F2E7E46A05EBEC83D9 /* MenuBarRootView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MenuBarRootView.swift; sourceTree = "<group>"; };
+		5FCF3A30E373DE6543200B72 /* WindowFlingDetector.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WindowFlingDetector.swift; sourceTree = "<group>"; };
+		63C6DE386002956685A1E13C /* AppDelegate.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppDelegate.swift; sourceTree = "<group>"; };
+		6B12C9E01CD0B201608A9CB6 /* SettingsRootView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SettingsRootView.swift; sourceTree = "<group>"; };
+		6B9367BB157BC42AB9CD585F /* PiPanel.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = PiPanel.app; sourceTree = BUILT_PRODUCTS_DIR; };
+		80E70584590638979CC31A8A /* PiPVideoLayerView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PiPVideoLayerView.swift; sourceTree = "<group>"; };
+		8A240CD1CF25DFB94FB426C5 /* SettingsWindowController.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SettingsWindowController.swift; sourceTree = "<group>"; };
+		9A76EFBF8FD44E1E71621D23 /* PiPSession.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PiPSession.swift; sourceTree = "<group>"; };
+		A173CC0A2B8FB1F32F749F0B /* WelcomeView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WelcomeView.swift; sourceTree = "<group>"; };
+		A1ACE1BA535FB479F51CFFEF /* AppearanceSettingsView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppearanceSettingsView.swift; sourceTree = "<group>"; };
+		A84F5167DDC91215D4F5B670 /* AXWindowLocator.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AXWindowLocator.swift; sourceTree = "<group>"; };
+		ACC703C76D283E57E5BF58C5 /* CoordinateTranslatorTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CoordinateTranslatorTests.swift; sourceTree = "<group>"; };
+		B034661F91B867E233A27265 /* PiPSessionManager.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PiPSessionManager.swift; sourceTree = "<group>"; };
+		B3CCE990B5093D986BB8F57E /* CoordinateTranslator.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CoordinateTranslator.swift; sourceTree = "<group>"; };
+		B5F77E1D746EBEC9425A4C73 /* PermissionsSettingsView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PermissionsSettingsView.swift; sourceTree = "<group>"; };
+		C186E5F512EE94DC8DA476B3 /* PiPPanelController.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PiPPanelController.swift; sourceTree = "<group>"; };
+		C31D745D5A27C0D580018CF2 /* VirtualDisplayHost.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = VirtualDisplayHost.swift; sourceTree = "<group>"; };
+		D0B6589E428C200EE4971012 /* WindowPickerView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WindowPickerView.swift; sourceTree = "<group>"; };
+		D11F15A32477424D62C95175 /* CaptureSession.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CaptureSession.swift; sourceTree = "<group>"; };
+		E57913F3802D17A376FB739D /* WindowEnumerator.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WindowEnumerator.swift; sourceTree = "<group>"; };
+		E92D9DD0638C3110C40F868C /* MenuBarStyles.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MenuBarStyles.swift; sourceTree = "<group>"; };
+		EB08EB0D9365F2AD14BDCF09 /* VirtualDisplayCoordinator.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = VirtualDisplayCoordinator.swift; sourceTree = "<group>"; };
+		F0696A05B45A15E460D3AA48 /* Assets.xcassets */ = {isa = PBXFileReference; lastKnownFileType = folder.assetcatalog; path = Assets.xcassets; sourceTree = "<group>"; };
+		F2B5F71CA5B5163761007AFF /* CloseDropZoneOverlay.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CloseDropZoneOverlay.swift; sourceTree = "<group>"; };
+		F5352DD75F0EE1D32041AB5C /* PiPanelTests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = PiPanelTests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
+		F827FF6175A7906ABC181B53 /* KeyboardEventForwarder.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = KeyboardEventForwarder.swift; sourceTree = "<group>"; };
+		FD9085AD9052FD4C268EDDA3 /* WindowInfo.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WindowInfo.swift; sourceTree = "<group>"; };
+		FDCB8A7CB694BAFF15CE8B93 /* PiPanelApp.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PiPanelApp.swift; sourceTree = "<group>"; };
+/* End PBXFileReference section */
+
+/* Begin PBXGroup section */
+		14F581C02FD4E15272376F8F /* PiPanel */ = {
+			isa = PBXGroup;
+			children = (
+				62E7351D84EA229FD67D922F /* App */,
+				98A178A1FD0A200AF5BA33B3 /* Capture */,
+				4D6E63B3545229E9EF306B37 /* Interaction */,
+				455862861490ED827B101A4C /* MenuBar */,
+				2F38AC4C049FB29E0DC23F21 /* Models */,
+				5B753F8A4CBA91FAAB0F42C5 /* Permissions */,
+				3A09ED36069837FB1AA17952 /* PiPPanel */,
+				F7E5C1AA1F44818ED6B090B9 /* Resources */,
+				E6FB09B46EAB5BD6C4822A9D /* Settings */,
+				8B78DB60861E992E214A86A1 /* Support */,
+				32766C5F4EB282A49E9735FD /* Welcome */,
+			);
+			path = PiPanel;
+			sourceTree = "<group>";
+		};
+		2E7B0007E6A33FB85ED81B18 = {
+			isa = PBXGroup;
+			children = (
+				14F581C02FD4E15272376F8F /* PiPanel */,
+				770D3D5E9C2819C774F13B0D /* PiPanelTests */,
+				8A58110C88C3C0D6B1D7D3AA /* Products */,
+			);
+			sourceTree = "<group>";
+		};
+		2F38AC4C049FB29E0DC23F21 /* Models */ = {
+			isa = PBXGroup;
+			children = (
+				9A76EFBF8FD44E1E71621D23 /* PiPSession.swift */,
+				FD9085AD9052FD4C268EDDA3 /* WindowInfo.swift */,
+			);
+			path = Models;
+			sourceTree = "<group>";
+		};
+		32766C5F4EB282A49E9735FD /* Welcome */ = {
+			isa = PBXGroup;
+			children = (
+				A173CC0A2B8FB1F32F749F0B /* WelcomeView.swift */,
+				324A3B3ABA956FC88838E4DF /* WelcomeWindowController.swift */,
+			);
+			path = Welcome;
+			sourceTree = "<group>";
+		};
+		3A09ED36069837FB1AA17952 /* PiPPanel */ = {
+			isa = PBXGroup;
+			children = (
+				F2B5F71CA5B5163761007AFF /* CloseDropZoneOverlay.swift */,
+				C186E5F512EE94DC8DA476B3 /* PiPPanelController.swift */,
+				B034661F91B867E233A27265 /* PiPSessionManager.swift */,
+				80E70584590638979CC31A8A /* PiPVideoLayerView.swift */,
+			);
+			path = PiPPanel;
+			sourceTree = "<group>";
+		};
+		455862861490ED827B101A4C /* MenuBar */ = {
+			isa = PBXGroup;
+			children = (
+				2254693F0D3E7D847875A2CF /* ActiveSessionsView.swift */,
+				474055F2E7E46A05EBEC83D9 /* MenuBarRootView.swift */,
+				E92D9DD0638C3110C40F868C /* MenuBarStyles.swift */,
+				D0B6589E428C200EE4971012 /* WindowPickerView.swift */,
+			);
+			path = MenuBar;
+			sourceTree = "<group>";
+		};
+		4D6E63B3545229E9EF306B37 /* Interaction */ = {
+			isa = PBXGroup;
+			children = (
+				A84F5167DDC91215D4F5B670 /* AXWindowLocator.swift */,
+				B3CCE990B5093D986BB8F57E /* CoordinateTranslator.swift */,
+				43DBBC5D91DF4C1A6D2B2EF9 /* InteractionForwarder.swift */,
+				F827FF6175A7906ABC181B53 /* KeyboardEventForwarder.swift */,
+				5FCF3A30E373DE6543200B72 /* WindowFlingDetector.swift */,
+			);
+			path = Interaction;
+			sourceTree = "<group>";
+		};
+		5B753F8A4CBA91FAAB0F42C5 /* Permissions */ = {
+			isa = PBXGroup;
+			children = (
+				2DBE2F5C4EBAAA621DB6BD51 /* PermissionRowView.swift */,
+				2AE897A33A363152CD43C052 /* PermissionsManager.swift */,
+			);
+			path = Permissions;
+			sourceTree = "<group>";
+		};
+		62E7351D84EA229FD67D922F /* App */ = {
+			isa = PBXGroup;
+			children = (
+				63C6DE386002956685A1E13C /* AppDelegate.swift */,
+				FDCB8A7CB694BAFF15CE8B93 /* PiPanelApp.swift */,
+			);
+			path = App;
+			sourceTree = "<group>";
+		};
+		770D3D5E9C2819C774F13B0D /* PiPanelTests */ = {
+			isa = PBXGroup;
+			children = (
+				ACC703C76D283E57E5BF58C5 /* CoordinateTranslatorTests.swift */,
+			);
+			path = PiPanelTests;
+			sourceTree = "<group>";
+		};
+		8A58110C88C3C0D6B1D7D3AA /* Products */ = {
+			isa = PBXGroup;
+			children = (
+				6B9367BB157BC42AB9CD585F /* PiPanel.app */,
+				F5352DD75F0EE1D32041AB5C /* PiPanelTests.xctest */,
+			);
+			name = Products;
+			sourceTree = "<group>";
+		};
+		8B78DB60861E992E214A86A1 /* Support */ = {
+			isa = PBXGroup;
+			children = (
+				0EA5D849008FFAC85D675A92 /* CGVirtualDisplayPrivate.h */,
+				01AF7CBFFD520347D21462D6 /* PiPanelLogger.swift */,
+			);
+			path = Support;
+			sourceTree = "<group>";
+		};
+		98A178A1FD0A200AF5BA33B3 /* Capture */ = {
+			isa = PBXGroup;
+			children = (
+				D11F15A32477424D62C95175 /* CaptureSession.swift */,
+				EB08EB0D9365F2AD14BDCF09 /* VirtualDisplayCoordinator.swift */,
+				C31D745D5A27C0D580018CF2 /* VirtualDisplayHost.swift */,
+				E57913F3802D17A376FB739D /* WindowEnumerator.swift */,
+			);
+			path = Capture;
+			sourceTree = "<group>";
+		};
+		E6FB09B46EAB5BD6C4822A9D /* Settings */ = {
+			isa = PBXGroup;
+			children = (
+				A1ACE1BA535FB479F51CFFEF /* AppearanceSettingsView.swift */,
+				119841F9F3BA8A23D9938924 /* GeneralSettingsView.swift */,
+				1508405894A3D2BE5E9BB1E3 /* LaunchAtLoginManager.swift */,
+				B5F77E1D746EBEC9425A4C73 /* PermissionsSettingsView.swift */,
+				6B12C9E01CD0B201608A9CB6 /* SettingsRootView.swift */,
+				1CD69719709E1E7474C4AD5F /* SettingsStore.swift */,
+				8A240CD1CF25DFB94FB426C5 /* SettingsWindowController.swift */,
+			);
+			path = Settings;
+			sourceTree = "<group>";
+		};
+		F7E5C1AA1F44818ED6B090B9 /* Resources */ = {
+			isa = PBXGroup;
+			children = (
+				F0696A05B45A15E460D3AA48 /* Assets.xcassets */,
+			);
+			path = Resources;
+			sourceTree = "<group>";
+		};
+/* End PBXGroup section */
+
+/* Begin PBXNativeTarget section */
+		44B03F75D808F359706329B1 /* PiPanelTests */ = {
+			isa = PBXNativeTarget;
+			buildConfigurationList = 9EB01E229D1588039FEDCC65 /* Build configuration list for PBXNativeTarget "PiPanelTests" */;
+			buildPhases = (
+				B84A8C9F5640A1DEAD26C07B /* Sources */,
+			);
+			buildRules = (
+			);
+			dependencies = (
+				FC94A3F1A7A3217284E81B46 /* PBXTargetDependency */,
+			);
+			name = PiPanelTests;
+			packageProductDependencies = (
+			);
+			productName = PiPanelTests;
+			productReference = F5352DD75F0EE1D32041AB5C /* PiPanelTests.xctest */;
+			productType = "com.apple.product-type.bundle.unit-test";
+		};
+		560C85ED82DFBB8F7E0B0A2B /* PiPanel */ = {
+			isa = PBXNativeTarget;
+			buildConfigurationList = BD7F96203EC48AEDFC56FB99 /* Build configuration list for PBXNativeTarget "PiPanel" */;
+			buildPhases = (
+				106ADDB45D4941E30D45400C /* Sources */,
+				EBBA98FD6365C138C101040F /* Resources */,
+			);
+			buildRules = (
+			);
+			dependencies = (
+			);
+			name = PiPanel;
+			packageProductDependencies = (
+			);
+			productName = PiPanel;
+			productReference = 6B9367BB157BC42AB9CD585F /* PiPanel.app */;
+			productType = "com.apple.product-type.application";
+		};
+/* End PBXNativeTarget section */
+
+/* Begin PBXProject section */
+		21EA20E0A74045DE2525D691 /* Project object */ = {
+			isa = PBXProject;
+			attributes = {
+				BuildIndependentTargetsInParallel = YES;
+				LastUpgradeCheck = 1430;
+				TargetAttributes = {
+					44B03F75D808F359706329B1 = {
+						DevelopmentTeam = "";
+						ProvisioningStyle = Automatic;
+					};
+					560C85ED82DFBB8F7E0B0A2B = {
+						DevelopmentTeam = "";
+						ProvisioningStyle = Automatic;
+					};
+				};
+			};
+			buildConfigurationList = 2674526733270F9CE3EAA172 /* Build configuration list for PBXProject "PiPanel" */;
+			developmentRegion = en;
+			hasScannedForEncodings = 0;
+			knownRegions = (
+				Base,
+				en,
+			);
+			mainGroup = 2E7B0007E6A33FB85ED81B18;
+			minimizedProjectReferenceProxies = 1;
+			preferredProjectObjectVersion = 77;
+			productRefGroup = 8A58110C88C3C0D6B1D7D3AA /* Products */;
+			projectDirPath = "";
+			projectRoot = "";
+			targets = (
+				560C85ED82DFBB8F7E0B0A2B /* PiPanel */,
+				44B03F75D808F359706329B1 /* PiPanelTests */,
+			);
+		};
+/* End PBXProject section */
+
+/* Begin PBXResourcesBuildPhase section */
+		EBBA98FD6365C138C101040F /* Resources */ = {
+			isa = PBXResourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				03B56D060B9A2F0F14B4D986 /* Assets.xcassets in Resources */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+/* End PBXResourcesBuildPhase section */
+
+/* Begin PBXSourcesBuildPhase section */
+		106ADDB45D4941E30D45400C /* Sources */ = {
+			isa = PBXSourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				DEFF29A2652D7E23DAEDB984 /* AXWindowLocator.swift in Sources */,
+				69A34C7BC13476020F2054E1 /* ActiveSessionsView.swift in Sources */,
+				F6CD7B0083855040CF2B5D5B /* AppDelegate.swift in Sources */,
+				D8E0332628C10AE3D8E30A66 /* AppearanceSettingsView.swift in Sources */,
+				1C27EF5D00168DA3CC1A8F1E /* CaptureSession.swift in Sources */,
+				73A28146B7C0632EA4A91B34 /* CloseDropZoneOverlay.swift in Sources */,
+				3EC62351DBC4C0DC45F2C51C /* CoordinateTranslator.swift in Sources */,
+				1DBC041842424F04822582CE /* GeneralSettingsView.swift in Sources */,
+				B8FEC6FA1ACC817540FCB560 /* InteractionForwarder.swift in Sources */,
+				D5255E5810CFBB7DF7352693 /* KeyboardEventForwarder.swift in Sources */,
+				55BECB6E817A6EC8492D9242 /* LaunchAtLoginManager.swift in Sources */,
+				2AF60B85EA5524A2D53DE22A /* MenuBarRootView.swift in Sources */,
+				C3223B3E00385F439AD8C2BB /* MenuBarStyles.swift in Sources */,
+				903533985AD59CE9B69F599D /* PermissionRowView.swift in Sources */,
+				79A8875F0C6ECD99D033076C /* PermissionsManager.swift in Sources */,
+				8477BBAE331C791896BA1D15 /* PermissionsSettingsView.swift in Sources */,
+				02AAF3628837E1EE1924BFCB /* PiPPanelController.swift in Sources */,
+				3225CE96E39EA8CE73DFE051 /* PiPSession.swift in Sources */,
+				629057B30C4C37780004B6E1 /* PiPSessionManager.swift in Sources */,
+				20D76CB6E7023A111237EEEF /* PiPVideoLayerView.swift in Sources */,
+				4E64DA6382A473092D6FCD1D /* PiPanelApp.swift in Sources */,
+				45B06208B398338BD705E258 /* PiPanelLogger.swift in Sources */,
+				AF56D06AB0B1949CE9E4EBDE /* SettingsRootView.swift in Sources */,
+				7933D1E90281C2C6D8D603C5 /* SettingsStore.swift in Sources */,
+				743DB66FCA4ABF64E200BE99 /* SettingsWindowController.swift in Sources */,
+				864D0147E7D89CA53D4EB971 /* VirtualDisplayCoordinator.swift in Sources */,
+				63408385629F413202896FE4 /* VirtualDisplayHost.swift in Sources */,
+				EAFDDD9A8DE980507E2FFA7B /* WelcomeView.swift in Sources */,
+				CA7B8A9CA4578DAAE8D745E8 /* WelcomeWindowController.swift in Sources */,
+				A4438B1846159D1C936750CD /* WindowEnumerator.swift in Sources */,
+				F00AE3310D1B484EC62CF366 /* WindowFlingDetector.swift in Sources */,
+				0B8C3FCFB71087EDD9E81B02 /* WindowInfo.swift in Sources */,
+				252941BD0CD2702D8EB0AFB7 /* WindowPickerView.swift in Sources */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		B84A8C9F5640A1DEAD26C07B /* Sources */ = {
+			isa = PBXSourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				95FCCC359E7975F7ACF06DE2 /* CoordinateTranslatorTests.swift in Sources */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+/* End PBXSourcesBuildPhase section */
+
+/* Begin PBXTargetDependency section */
+		FC94A3F1A7A3217284E81B46 /* PBXTargetDependency */ = {
+			isa = PBXTargetDependency;
+			target = 560C85ED82DFBB8F7E0B0A2B /* PiPanel */;
+			targetProxy = 923F84549CE6A204E05D7E2F /* PBXContainerItemProxy */;
+		};
+/* End PBXTargetDependency section */
+
+/* Begin XCBuildConfiguration section */
+		0DFA05C680F0A3BC0C2BB5DB /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				BUNDLE_LOADER = "$(TEST_HOST)";
+				COMBINE_HIDPI_IMAGES = YES;
+				GENERATE_INFOPLIST_FILE = YES;
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/../Frameworks",
+					"@loader_path/../Frameworks",
+				);
+				PRODUCT_BUNDLE_IDENTIFIER = com.pipanel.mac.tests;
+				SDKROOT = macosx;
+				TEST_HOST = "$(BUILT_PRODUCTS_DIR)/PiPanel.app/Contents/MacOS/PiPanel";
+			};
+			name = Debug;
+		};
+		20232FD4649E6EA83C9CD854 /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ALWAYS_SEARCH_USER_PATHS = NO;
+				CLANG_ANALYZER_NONNULL = YES;
+				CLANG_ANALYZER_NUMBER_OBJECT_CONVERSION = YES_AGGRESSIVE;
+				CLANG_CXX_LANGUAGE_STANDARD = "gnu++14";
+				CLANG_CXX_LIBRARY = "libc++";
+				CLANG_ENABLE_MODULES = YES;
+				CLANG_ENABLE_OBJC_ARC = YES;
+				CLANG_ENABLE_OBJC_WEAK = YES;
+				CLANG_WARN_BLOCK_CAPTURE_AUTORELEASING = YES;
+				CLANG_WARN_BOOL_CONVERSION = YES;
+				CLANG_WARN_COMMA = YES;
+				CLANG_WARN_CONSTANT_CONVERSION = YES;
+				CLANG_WARN_DEPRECATED_OBJC_IMPLEMENTATIONS = YES;
+				CLANG_WARN_DIRECT_OBJC_ISA_USAGE = YES_ERROR;
+				CLANG_WARN_DOCUMENTATION_COMMENTS = YES;
+				CLANG_WARN_EMPTY_BODY = YES;
+				CLANG_WARN_ENUM_CONVERSION = YES;
+				CLANG_WARN_INFINITE_RECURSION = YES;
+				CLANG_WARN_INT_CONVERSION = YES;
+				CLANG_WARN_NON_LITERAL_NULL_CONVERSION = YES;
+				CLANG_WARN_OBJC_IMPLICIT_RETAIN_SELF = YES;
+				CLANG_WARN_OBJC_LITERAL_CONVERSION = YES;
+				CLANG_WARN_OBJC_ROOT_CLASS = YES_ERROR;
+				CLANG_WARN_QUOTED_INCLUDE_IN_FRAMEWORK_HEADER = YES;
+				CLANG_WARN_RANGE_LOOP_ANALYSIS = YES;
+				CLANG_WARN_STRICT_PROTOTYPES = YES;
+				CLANG_WARN_SUSPICIOUS_MOVE = YES;
+				CLANG_WARN_UNGUARDED_AVAILABILITY = YES_AGGRESSIVE;
+				CLANG_WARN_UNREACHABLE_CODE = YES;
+				CLANG_WARN__DUPLICATE_METHOD_MATCH = YES;
+				CODE_SIGN_STYLE = Automatic;
+				COPY_PHASE_STRIP = NO;
+				CURRENT_PROJECT_VERSION = 1;
+				DEBUG_INFORMATION_FORMAT = "dwarf-with-dsym";
+				DEVELOPMENT_TEAM = "";
+				ENABLE_HARDENED_RUNTIME = YES;
+				ENABLE_NS_ASSERTIONS = NO;
+				ENABLE_STRICT_OBJC_MSGSEND = YES;
+				GCC_C_LANGUAGE_STANDARD = gnu11;
+				GCC_NO_COMMON_BLOCKS = YES;
+				GCC_WARN_64_TO_32_BIT_CONVERSION = YES;
+				GCC_WARN_ABOUT_RETURN_TYPE = YES_ERROR;
+				GCC_WARN_UNDECLARED_SELECTOR = YES;
+				GCC_WARN_UNINITIALIZED_AUTOS = YES_AGGRESSIVE;
+				GCC_WARN_UNUSED_FUNCTION = YES;
+				GCC_WARN_UNUSED_VARIABLE = YES;
+				MACOSX_DEPLOYMENT_TARGET = 14.0;
+				MARKETING_VERSION = 0.1.0;
+				MTL_ENABLE_DEBUG_INFO = NO;
+				MTL_FAST_MATH = YES;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SDKROOT = macosx;
+				SWIFT_COMPILATION_MODE = wholemodule;
+				SWIFT_OPTIMIZATION_LEVEL = "-O";
+				SWIFT_VERSION = 5.0;
+			};
+			name = Release;
+		};
+		22DDF54C788414DED81287DD /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				BUNDLE_LOADER = "$(TEST_HOST)";
+				COMBINE_HIDPI_IMAGES = YES;
+				GENERATE_INFOPLIST_FILE = YES;
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/../Frameworks",
+					"@loader_path/../Frameworks",
+				);
+				PRODUCT_BUNDLE_IDENTIFIER = com.pipanel.mac.tests;
+				SDKROOT = macosx;
+				TEST_HOST = "$(BUILT_PRODUCTS_DIR)/PiPanel.app/Contents/MacOS/PiPanel";
+			};
+			name = Release;
+		};
+		281A007645C6268165C47237 /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ALWAYS_SEARCH_USER_PATHS = NO;
+				CLANG_ANALYZER_NONNULL = YES;
+				CLANG_ANALYZER_NUMBER_OBJECT_CONVERSION = YES_AGGRESSIVE;
+				CLANG_CXX_LANGUAGE_STANDARD = "gnu++14";
+				CLANG_CXX_LIBRARY = "libc++";
+				CLANG_ENABLE_MODULES = YES;
+				CLANG_ENABLE_OBJC_ARC = YES;
+				CLANG_ENABLE_OBJC_WEAK = YES;
+				CLANG_WARN_BLOCK_CAPTURE_AUTORELEASING = YES;
+				CLANG_WARN_BOOL_CONVERSION = YES;
+				CLANG_WARN_COMMA = YES;
+				CLANG_WARN_CONSTANT_CONVERSION = YES;
+				CLANG_WARN_DEPRECATED_OBJC_IMPLEMENTATIONS = YES;
+				CLANG_WARN_DIRECT_OBJC_ISA_USAGE = YES_ERROR;
+				CLANG_WARN_DOCUMENTATION_COMMENTS = YES;
+				CLANG_WARN_EMPTY_BODY = YES;
+				CLANG_WARN_ENUM_CONVERSION = YES;
+				CLANG_WARN_INFINITE_RECURSION = YES;
+				CLANG_WARN_INT_CONVERSION = YES;
+				CLANG_WARN_NON_LITERAL_NULL_CONVERSION = YES;
+				CLANG_WARN_OBJC_IMPLICIT_RETAIN_SELF = YES;
+				CLANG_WARN_OBJC_LITERAL_CONVERSION = YES;
+				CLANG_WARN_OBJC_ROOT_CLASS = YES_ERROR;
+				CLANG_WARN_QUOTED_INCLUDE_IN_FRAMEWORK_HEADER = YES;
+				CLANG_WARN_RANGE_LOOP_ANALYSIS = YES;
+				CLANG_WARN_STRICT_PROTOTYPES = YES;
+				CLANG_WARN_SUSPICIOUS_MOVE = YES;
+				CLANG_WARN_UNGUARDED_AVAILABILITY = YES_AGGRESSIVE;
+				CLANG_WARN_UNREACHABLE_CODE = YES;
+				CLANG_WARN__DUPLICATE_METHOD_MATCH = YES;
+				CODE_SIGN_STYLE = Automatic;
+				COPY_PHASE_STRIP = NO;
+				CURRENT_PROJECT_VERSION = 1;
+				DEBUG_INFORMATION_FORMAT = dwarf;
+				DEVELOPMENT_TEAM = "";
+				ENABLE_HARDENED_RUNTIME = YES;
+				ENABLE_STRICT_OBJC_MSGSEND = YES;
+				ENABLE_TESTABILITY = YES;
+				GCC_C_LANGUAGE_STANDARD = gnu11;
+				GCC_DYNAMIC_NO_PIC = NO;
+				GCC_NO_COMMON_BLOCKS = YES;
+				GCC_OPTIMIZATION_LEVEL = 0;
+				GCC_PREPROCESSOR_DEFINITIONS = (
+					"$(inherited)",
+					"DEBUG=1",
+				);
+				GCC_WARN_64_TO_32_BIT_CONVERSION = YES;
+				GCC_WARN_ABOUT_RETURN_TYPE = YES_ERROR;
+				GCC_WARN_UNDECLARED_SELECTOR = YES;
+				GCC_WARN_UNINITIALIZED_AUTOS = YES_AGGRESSIVE;
+				GCC_WARN_UNUSED_FUNCTION = YES;
+				GCC_WARN_UNUSED_VARIABLE = YES;
+				MACOSX_DEPLOYMENT_TARGET = 14.0;
+				MARKETING_VERSION = 0.1.0;
+				MTL_ENABLE_DEBUG_INFO = INCLUDE_SOURCE;
+				MTL_FAST_MATH = YES;
+				ONLY_ACTIVE_ARCH = YES;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SDKROOT = macosx;
+				SWIFT_ACTIVE_COMPILATION_CONDITIONS = DEBUG;
+				SWIFT_OPTIMIZATION_LEVEL = "-Onone";
+				SWIFT_VERSION = 5.0;
+			};
+			name = Debug;
+		};
+		568B78C85F8D7466CE45DDBF /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
+				CODE_SIGN_ENTITLEMENTS = PiPanel/App/PiPanel.entitlements;
+				COMBINE_HIDPI_IMAGES = YES;
+				GENERATE_INFOPLIST_FILE = NO;
+				INFOPLIST_FILE = PiPanel/App/Info.plist;
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/../Frameworks",
+				);
+				PRODUCT_BUNDLE_IDENTIFIER = com.pipanel.mac;
+				PRODUCT_NAME = PiPanel;
+				SDKROOT = macosx;
+				SWIFT_EMIT_LOC_STRINGS = NO;
+				SWIFT_OBJC_BRIDGING_HEADER = PiPanel/Support/CGVirtualDisplayPrivate.h;
+			};
+			name = Debug;
+		};
+		B72E3A5E21555D2D21192333 /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
+				CODE_SIGN_ENTITLEMENTS = PiPanel/App/PiPanel.entitlements;
+				COMBINE_HIDPI_IMAGES = YES;
+				GENERATE_INFOPLIST_FILE = NO;
+				INFOPLIST_FILE = PiPanel/App/Info.plist;
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/../Frameworks",
+				);
+				PRODUCT_BUNDLE_IDENTIFIER = com.pipanel.mac;
+				PRODUCT_NAME = PiPanel;
+				SDKROOT = macosx;
+				SWIFT_EMIT_LOC_STRINGS = NO;
+				SWIFT_OBJC_BRIDGING_HEADER = PiPanel/Support/CGVirtualDisplayPrivate.h;
+			};
+			name = Release;
+		};
+/* End XCBuildConfiguration section */
+
+/* Begin XCConfigurationList section */
+		2674526733270F9CE3EAA172 /* Build configuration list for PBXProject "PiPanel" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				281A007645C6268165C47237 /* Debug */,
+				20232FD4649E6EA83C9CD854 /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Debug;
+		};
+		9EB01E229D1588039FEDCC65 /* Build configuration list for PBXNativeTarget "PiPanelTests" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				0DFA05C680F0A3BC0C2BB5DB /* Debug */,
+				22DDF54C788414DED81287DD /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Debug;
+		};
+		BD7F96203EC48AEDFC56FB99 /* Build configuration list for PBXNativeTarget "PiPanel" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				568B78C85F8D7466CE45DDBF /* Debug */,
+				B72E3A5E21555D2D21192333 /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Debug;
+		};
+/* End XCConfigurationList section */
+	};
+	rootObject = 21EA20E0A74045DE2525D691 /* Project object */;
+}

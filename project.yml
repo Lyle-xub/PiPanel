@@ -1,6 +1,6 @@
-name: AnyPiP
+name: PiPanel
 options:
-  bundleIdPrefix: com.anypip
+  bundleIdPrefix: com.pipanel
   deploymentTarget:
     macOS: "14.0"
   createIntermediateGroups: true
@@ -15,46 +15,46 @@ settings:
     MACOSX_DEPLOYMENT_TARGET: "14.0"
 
 targets:
-  AnyPiP:
+  PiPanel:
     type: application
     platform: macOS
     sources:
-      - path: AnyPiP
+      - path: PiPanel
         excludes:
           - "**/Info.plist"
           - "**/*.entitlements"
     settings:
       base:
-        PRODUCT_BUNDLE_IDENTIFIER: com.anypip.mac
-        PRODUCT_NAME: AnyPiP
-        INFOPLIST_FILE: AnyPiP/App/Info.plist
-        CODE_SIGN_ENTITLEMENTS: AnyPiP/App/AnyPiP.entitlements
+        PRODUCT_BUNDLE_IDENTIFIER: com.pipanel.mac
+        PRODUCT_NAME: PiPanel
+        INFOPLIST_FILE: PiPanel/App/Info.plist
+        CODE_SIGN_ENTITLEMENTS: PiPanel/App/PiPanel.entitlements
         ASSETCATALOG_COMPILER_APPICON_NAME: AppIcon
         GENERATE_INFOPLIST_FILE: NO
         SWIFT_EMIT_LOC_STRINGS: NO
-        SWIFT_OBJC_BRIDGING_HEADER: AnyPiP/Support/CGVirtualDisplayPrivate.h
+        SWIFT_OBJC_BRIDGING_HEADER: PiPanel/Support/CGVirtualDisplayPrivate.h
 
-  AnyPiPTests:
+  PiPanelTests:
     type: bundle.unit-test
     platform: macOS
     sources:
-      - path: AnyPiPTests
+      - path: PiPanelTests
     dependencies:
-      - target: AnyPiP
+      - target: PiPanel
     settings:
       base:
-        PRODUCT_BUNDLE_IDENTIFIER: com.anypip.mac.tests
+        PRODUCT_BUNDLE_IDENTIFIER: com.pipanel.mac.tests
         GENERATE_INFOPLIST_FILE: YES
 
 schemes:
-  AnyPiP:
+  PiPanel:
     build:
       targets:
-        AnyPiP: all
-        AnyPiPTests: [test]
+        PiPanel: all
+        PiPanelTests: [test]
     run:
       config: Debug
     test:
       config: Debug
       targets:
-        - AnyPiPTests
+        - PiPanelTests

@@ -15,10 +15,10 @@
             buildForAnalyzing = "YES">
             <BuildableReference
                BuildableIdentifier = "primary"
-               BlueprintIdentifier = "0C4119CE78E8993B3C89E7A8"
-               BuildableName = "AnyPiP.app"
-               BlueprintName = "AnyPiP"
-               ReferencedContainer = "container:AnyPiP.xcodeproj">
+               BlueprintIdentifier = "560C85ED82DFBB8F7E0B0A2B"
+               BuildableName = "PiPanel.app"
+               BlueprintName = "PiPanel"
+               ReferencedContainer = "container:PiPanel.xcodeproj">
             </BuildableReference>
          </BuildActionEntry>
          <BuildActionEntry
@@ -29,10 +29,10 @@
             buildForAnalyzing = "NO">
             <BuildableReference
                BuildableIdentifier = "primary"
-               BlueprintIdentifier = "D046A1E5F95692AD3E98D753"
-               BuildableName = "AnyPiPTests.xctest"
-               BlueprintName = "AnyPiPTests"
-               ReferencedContainer = "container:AnyPiP.xcodeproj">
+               BlueprintIdentifier = "44B03F75D808F359706329B1"
+               BuildableName = "PiPanelTests.xctest"
+               BlueprintName = "PiPanelTests"
+               ReferencedContainer = "container:PiPanel.xcodeproj">
             </BuildableReference>
          </BuildActionEntry>
       </BuildActionEntries>
@@ -46,10 +46,10 @@
       <MacroExpansion>
          <BuildableReference
             BuildableIdentifier = "primary"
-            BlueprintIdentifier = "0C4119CE78E8993B3C89E7A8"
-            BuildableName = "AnyPiP.app"
-            BlueprintName = "AnyPiP"
-            ReferencedContainer = "container:AnyPiP.xcodeproj">
+            BlueprintIdentifier = "560C85ED82DFBB8F7E0B0A2B"
+            BuildableName = "PiPanel.app"
+            BlueprintName = "PiPanel"
+            ReferencedContainer = "container:PiPanel.xcodeproj">
          </BuildableReference>
       </MacroExpansion>
       <Testables>
@@ -58,10 +58,10 @@
             parallelizable = "NO">
             <BuildableReference
                BuildableIdentifier = "primary"
-               BlueprintIdentifier = "D046A1E5F95692AD3E98D753"
-               BuildableName = "AnyPiPTests.xctest"
-               BlueprintName = "AnyPiPTests"
-               ReferencedContainer = "container:AnyPiP.xcodeproj">
+               BlueprintIdentifier = "44B03F75D808F359706329B1"
+               BuildableName = "PiPanelTests.xctest"
+               BlueprintName = "PiPanelTests"
+               ReferencedContainer = "container:PiPanel.xcodeproj">
             </BuildableReference>
          </TestableReference>
       </Testables>
@@ -82,10 +82,10 @@
          runnableDebuggingMode = "0">
          <BuildableReference
             BuildableIdentifier = "primary"
-            BlueprintIdentifier = "0C4119CE78E8993B3C89E7A8"
-            BuildableName = "AnyPiP.app"
-            BlueprintName = "AnyPiP"
-            ReferencedContainer = "container:AnyPiP.xcodeproj">
+            BlueprintIdentifier = "560C85ED82DFBB8F7E0B0A2B"
+            BuildableName = "PiPanel.app"
+            BlueprintName = "PiPanel"
+            ReferencedContainer = "container:PiPanel.xcodeproj">
          </BuildableReference>
       </BuildableProductRunnable>
       <CommandLineArguments>
@@ -101,10 +101,10 @@
          runnableDebuggingMode = "0">
          <BuildableReference
             BuildableIdentifier = "primary"
-            BlueprintIdentifier = "0C4119CE78E8993B3C89E7A8"
-            BuildableName = "AnyPiP.app"
-            BlueprintName = "AnyPiP"
-            ReferencedContainer = "container:AnyPiP.xcodeproj">
+            BlueprintIdentifier = "560C85ED82DFBB8F7E0B0A2B"
+            BuildableName = "PiPanel.app"
+            BlueprintName = "PiPanel"
+            ReferencedContainer = "container:PiPanel.xcodeproj">
          </BuildableReference>
       </BuildableProductRunnable>
    </ProfileAction>
