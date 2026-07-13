@@ -5,6 +5,10 @@
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>AnyPiP — 把任何窗口，变成画中画</title>
 <meta name="description" content="AnyPiP 是一个 macOS 菜单栏应用，可以把任意窗口拖拽成可移动、可缩放、可交互的画中画悬浮窗。开源、免费、原生体验。">
+<link rel="icon" type="image/png" sizes="512x512" href="assets/icon-512.png">
+<link rel="icon" type="image/png" sizes="256x256" href="assets/icon-256.png">
+<link rel="icon" type="image/png" sizes="64x64" href="assets/icon-64.png">
+<link rel="apple-touch-icon" href="assets/icon-256.png">
 <style>
   :root{
     --bg:#ffffff;
@@ -16,9 +20,10 @@
     --text:#1d1d1f;
     --text-dim:#6e6e73;
     --text-dimmer:#86868b;
-    --accent:#0071e3;
+    --accent:#0d70ff;
     --accent-2:#5e5ce6;
     --accent-3:#00b4a6;
+    --accent-warm:#ff5800;
     --radius:20px;
   }
   *{box-sizing:border-box;}
@@ -133,13 +138,10 @@
     letter-spacing:-.01em;
   }
   .brand-mark{
-    width:30px;height:30px;
-    border-radius:9px;
-    background:linear-gradient(135deg, var(--accent), var(--accent-2));
-    display:flex;align-items:center;justify-content:center;
-    box-shadow:0 4px 16px rgba(0,113,227,.28);
+    width:28px;height:28px;
+    display:block;
+    filter:drop-shadow(0 3px 10px rgba(0,113,227,.28));
   }
-  .brand-mark svg{width:16px;height:16px;}
   .nav-links{
     display:flex;
     align-items:center;
@@ -165,10 +167,18 @@
 
   /* ---------- hero ---------- */
   header.hero{
-    padding:168px 0 90px;
+    padding:150px 0 90px;
     text-align:center;
   }
+  .hero-icon{
+    margin:0 auto;
+    border-radius:22px;
+    box-shadow:0 16px 40px -14px rgba(0,0,0,.22);
+    opacity:0;
+    animation:rise .8s ease forwards;
+  }
   .eyebrow{
+    margin-top:22px;
     display:inline-flex;
     align-items:center;
     gap:8px;
@@ -247,11 +257,11 @@
     transition:transform .25s cubic-bezier(.2,.8,.2,1), box-shadow .25s ease, background .25s ease;
   }
   .btn-primary{
-    background:linear-gradient(135deg, var(--accent), var(--accent-2));
+    background:var(--accent);
     color:#fff;
-    box-shadow:0 10px 26px -8px rgba(0,113,227,.45);
+    box-shadow:0 10px 26px -8px rgba(13,112,255,.45);
   }
-  .btn-primary:hover{transform:translateY(-2px) scale(1.02);box-shadow:0 16px 32px -8px rgba(0,113,227,.55);}
+  .btn-primary:hover{transform:translateY(-2px) scale(1.02);box-shadow:0 16px 32px -8px rgba(13,112,255,.55);background:#0a5fdb;}
   .btn-ghost{
     background:rgba(0,0,0,.03);
     border:1px solid var(--border-strong);
@@ -485,14 +495,18 @@
   }
   .card:hover::before{opacity:1;}
   .card-icon{
-    width:42px;height:42px;
-    border-radius:11px;
+    width:58px;height:58px;
+    border-radius:16px;
     display:flex;align-items:center;justify-content:center;
-    background:linear-gradient(135deg, rgba(0,113,227,.12), rgba(94,92,230,.10));
-    border:1px solid var(--border-strong);
-    margin-bottom:16px;
+    background:var(--bg-2);
+    margin-bottom:18px;
+    transition:transform .35s cubic-bezier(.2,.8,.2,1), background .35s ease;
   }
-  .card-icon svg{width:20px;height:20px;stroke:var(--text);}
+  .card:hover .card-icon{transform:scale(1.06) rotate(-2deg);background:rgba(13,112,255,.09);}
+  .card-icon.warm{background:rgba(255,88,0,.08);}
+  .card:hover .card-icon.warm{background:rgba(255,88,0,.14);}
+  .card-icon svg{width:28px;height:28px;stroke:var(--accent);}
+  .card-icon.warm svg{stroke:var(--accent-warm);}
   .card h3{margin:0 0 8px;font-size:16px;font-weight:700;letter-spacing:-.01em;}
   .card p{margin:0;font-size:13.5px;line-height:1.65;color:var(--text-dim);}
 
@@ -531,6 +545,69 @@
   }
   .step h3{margin:0 0 8px;font-size:15.5px;font-weight:700;}
   .step p{margin:0;font-size:13.5px;color:var(--text-dim);line-height:1.65;}
+
+  /* ---------- faq ---------- */
+  .faq-list{
+    max-width:680px;
+    margin:0 auto;
+    display:flex;
+    flex-direction:column;
+    gap:10px;
+  }
+  .faq-item{
+    border:1px solid var(--border);
+    border-radius:14px;
+    background:var(--surface);
+    overflow:hidden;
+    transition:border-color .25s ease, box-shadow .25s ease;
+  }
+  .faq-item:hover{border-color:var(--border-strong);}
+  .faq-item[open]{border-color:var(--border-strong);box-shadow:0 12px 30px -18px rgba(0,0,0,.14);}
+  .faq-item summary{
+    list-style:none;
+    cursor:pointer;
+    display:flex;
+    align-items:center;
+    justify-content:space-between;
+    gap:16px;
+    padding:18px 20px;
+    font-size:14.5px;
+    font-weight:600;
+  }
+  .faq-item summary::-webkit-details-marker{display:none;}
+  .faq-toggle{
+    flex:0 0 auto;
+    width:22px;height:22px;
+    border-radius:50%;
+    background:var(--bg-2);
+    position:relative;
+    transition:transform .3s cubic-bezier(.2,.8,.2,1), background .25s ease;
+  }
+  .faq-toggle::before,.faq-toggle::after{
+    content:"";
+    position:absolute;
+    top:50%;left:50%;
+    background:var(--text);
+    transform:translate(-50%,-50%);
+    transition:opacity .2s ease;
+  }
+  .faq-toggle::before{width:9px;height:1.6px;}
+  .faq-toggle::after{width:1.6px;height:9px;}
+  .faq-item[open] .faq-toggle{transform:rotate(45deg);background:rgba(13,112,255,.1);}
+  .faq-item[open] .faq-toggle::before,.faq-item[open] .faq-toggle::after{background:var(--accent);}
+  .faq-item p{
+    margin:0;
+    padding:0 20px 20px;
+    font-size:13.5px;
+    line-height:1.75;
+    color:var(--text-dim);
+    animation:faqIn .3s ease;
+  }
+  .faq-item p a{color:var(--accent);text-decoration:underline;text-underline-offset:2px;}
+  @keyframes faqIn{
+    from{opacity:0;transform:translateY(-4px);}
+    to{opacity:1;transform:translateY(0);}
+  }
 
   /* ---------- open source callout ---------- */
   .oss{
@@ -582,14 +659,13 @@
 <nav id="nav">
   <div class="wrap nav-inner">
     <div class="brand">
-      <span class="brand-mark">
-        <svg viewBox="0 0 24 24" fill="none"><rect x="2" y="4" width="20" height="14" rx="2.5" stroke="white" stroke-width="1.8"/><rect x="12.5" y="10.5" width="7.5" height="5.5" rx="1.2" fill="white"/></svg>
-      </span>
+      <img class="brand-mark" src="assets/icon-128.png" alt="AnyPiP" width="28" height="28">
       AnyPiP
     </div>
     <div class="nav-links">
       <a href="#features">功能</a>
       <a href="#how">原理</a>
+      <a href="#faq">FAQ</a>
       <a href="#opensource">开源</a>
       <a class="nav-cta" href="https://github.com/Lyle-xub/AnyPiP" target="_blank" rel="noopener">
         <svg viewBox="0 0 16 16" fill="currentColor"><path d="M8 0C3.58 0 0 3.58 0 8c0 3.54 2.29 6.53 5.47 7.59.4.07.55-.17.55-.38 0-.19-.01-.82-.01-1.49-2.01.37-2.53-.49-2.69-.94-.09-.23-.48-.94-.82-1.13-.28-.15-.68-.52-.01-.53.63-.01 1.08.58 1.23.82.72 1.21 1.87.87 2.33.66.07-.52.28-.87.51-1.07-1.78-.2-3.64-.89-3.64-3.95 0-.87.31-1.59.82-2.15-.08-.2-.36-1.02.08-2.12 0 0 .67-.21 2.2.82.64-.18 1.32-.27 2-.27.68 0 1.36.09 2 .27 1.53-1.04 2.2-.82 2.2-.82.44 1.1.16 1.92.08 2.12.51.56.82 1.27.82 2.15 0 3.07-1.87 3.75-3.65 3.95.29.25.54.73.54 1.48 0 1.07-.01 1.93-.01 2.2 0 .21.15.46.55.38A8.01 8.01 0 0 0 16 8c0-4.42-3.58-8-8-8z"/></svg>
@@ -601,6 +677,7 @@
 
 <header class="hero">
   <div class="wrap">
+    <img class="hero-icon" src="assets/icon-256.png" alt="AnyPiP app icon" width="88" height="88">
     <span class="eyebrow"><span class="dot"></span> 开源 · 免费 · 原生 macOS</span>
     <h1 class="headline">把任何窗口，<br>拖成一个<span class="grad">画中画</span></h1>
     <p class="subhead">AnyPiP 是一个轻量的 macOS 菜单栏应用。把窗口甩到屏幕角落，它就变成一个可以移动、缩放、直接交互的悬浮小窗——不用切换应用，也不打断你正在做的事。</p>
@@ -667,7 +744,7 @@
       </div>
 
       <div class="card reveal">
-        <div class="card-icon"><svg viewBox="0 0 24 24" fill="none" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M8 3H5a2 2 0 0 0-2 2v3m18-5v3a2 2 0 0 1-2 2h-3M3 16v3a2 2 0 0 0 2 2h3m11-5v3a2 2 0 0 1-2 2h-3"/></svg></div>
+        <div class="card-icon warm"><svg viewBox="0 0 24 24" fill="none" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M8 3H5a2 2 0 0 0-2 2v3m18-5v3a2 2 0 0 1-2 2h-3M3 16v3a2 2 0 0 0 2 2h3m11-5v3a2 2 0 0 1-2 2h-3"/></svg></div>
         <h3>尺寸自适应</h3>
         <p>拖拽画中画边缘调整大小时，内部软件会尽量跟着一起变化，而不是简单粗暴地裁切或拉伸画面。</p>
       </div>
@@ -716,6 +793,58 @@
         <h3>随手操作</h3>
         <p>鼠标悬停即可交互，拖拽移动、边缘缩放，用完随手甩开即可关闭。</p>
       </div>
+    </div>
+  </div>
+</section>
+
+<section id="faq">
+  <div class="wrap">
+    <div class="section-head reveal">
+      <span class="kicker">FAQ</span>
+      <h2>常见问题</h2>
+    </div>
+    <div class="faq-list">
+
+      <details class="faq-item reveal">
+        <summary>
+          <span>AnyPiP 完全免费吗？</span>
+          <span class="faq-toggle"></span>
+        </summary>
+        <p>是的，AnyPiP 完全免费、开源，没有隐藏付费项或试用期限制。</p>
+      </details>
+
+      <details class="faq-item reveal">
+        <summary>
+          <span>需要开启哪些系统权限？</span>
+          <span class="faq-toggle"></span>
+        </summary>
+        <p>需要「屏幕录制」和「辅助功能」两项权限——前者用于捕获窗口画面，后者用于把点击、滚动、打字等操作转发到源窗口。首次使用时 App 会引导你逐步开启。</p>
+      </details>
+
+      <details class="faq-item reveal">
+        <summary>
+          <span>支持 Apple Silicon 和 Intel 芯片吗？</span>
+          <span class="faq-toggle"></span>
+        </summary>
+        <p>支持，构建产物是通用二进制（arm64 + x86_64），两种芯片的 Mac 都可以直接运行。</p>
+      </details>
+
+      <details class="faq-item reveal">
+        <summary>
+          <span>最低系统要求是什么？</span>
+          <span class="faq-toggle"></span>
+        </summary>
+        <p>macOS 14.0（Sonoma）及以上版本。</p>
+      </details>
+
+      <details class="faq-item reveal">
+        <summary>
+          <span>遇到问题或有功能建议怎么反馈？</span>
+          <span class="faq-toggle"></span>
+        </summary>
+        <p>欢迎直接在 GitHub 仓库提 <a href="https://github.com/Lyle-xub/AnyPiP/issues" target="_blank" rel="noopener">Issue</a>，代码也完全开放，也欢迎提交 PR。</p>
+      </details>
+
     </div>
   </div>
 </section>
