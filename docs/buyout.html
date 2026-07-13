@@ -1,0 +1,437 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>买断版 — 一次购买，终身使用 | PiPanel</title>
+<meta name="description" content="PiPanel 买断版：一次性付费，永久解锁全部自定义设置，包含所有未来更新。没有订阅，不会自动扣费。">
+<link rel="icon" type="image/png" sizes="512x512" href="assets/icon-512.png">
+<link rel="icon" type="image/png" sizes="256x256" href="assets/icon-256.png">
+<link rel="icon" type="image/png" sizes="64x64" href="assets/icon-64.png">
+<link rel="apple-touch-icon" href="assets/icon-256.png">
+<style>
+  :root{
+    --bg:#ffffff;
+    --bg-2:#f5f5f7;
+    --surface:#ffffff;
+    --surface-2:#f5f5f7;
+    --border:rgba(0,0,0,.07);
+    --border-strong:rgba(0,0,0,.12);
+    --text:#1d1d1f;
+    --text-dim:#6e6e73;
+    --text-dimmer:#86868b;
+    --accent:#0d70ff;
+    --accent-2:#5e5ce6;
+    --accent-3:#00b4a6;
+    --radius:20px;
+  }
+  *{box-sizing:border-box;}
+  html{scroll-behavior:smooth;}
+  body{
+    margin:0;
+    background:var(--bg);
+    color:var(--text);
+    font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,"PingFang SC","Microsoft YaHei",sans-serif;
+    -webkit-font-smoothing:antialiased;
+    overflow-x:hidden;
+  }
+  a{color:inherit;text-decoration:none;}
+  img,svg{display:block;max-width:100%;}
+
+  @media (prefers-reduced-motion: reduce){
+    *{animation-duration:.001ms !important;animation-iteration-count:1 !important;transition-duration:.001ms !important;}
+  }
+
+  .bg-blobs{position:fixed;inset:0;z-index:0;overflow:hidden;pointer-events:none;}
+  .blob{position:absolute;border-radius:50%;filter:blur(110px);opacity:.24;will-change:transform;}
+  .blob-1{width:600px;height:600px;top:-220px;left:-160px;background:radial-gradient(circle at 30% 30%, var(--accent), transparent 70%);animation:float1 26s ease-in-out infinite;}
+  .blob-2{width:520px;height:520px;top:120px;right:-220px;background:radial-gradient(circle at 60% 40%, var(--accent-2), transparent 70%);animation:float2 32s ease-in-out infinite;}
+  @keyframes float1{0%,100%{transform:translate(0,0) scale(1);}50%{transform:translate(60px,80px) scale(1.15);}}
+  @keyframes float2{0%,100%{transform:translate(0,0) scale(1);}50%{transform:translate(-70px,60px) scale(0.9);}}
+
+  .wrap{position:relative;z-index:2;max-width:1120px;margin:0 auto;padding:0 28px;}
+
+  nav{position:fixed;top:0;left:0;right:0;z-index:50;padding:18px 0;transition:background-color .35s ease, border-color .35s ease, backdrop-filter .35s ease;border-bottom:1px solid transparent;}
+  nav.scrolled{background-color:rgba(255,255,255,.78);backdrop-filter:blur(16px) saturate(160%);-webkit-backdrop-filter:blur(16px) saturate(160%);border-bottom-color:var(--border);}
+  .nav-inner{display:flex;align-items:center;justify-content:space-between;}
+  .brand{display:flex;align-items:center;gap:10px;font-weight:700;font-size:16px;letter-spacing:-.01em;}
+  .brand-mark{width:28px;height:28px;display:block;filter:drop-shadow(0 3px 10px rgba(0,113,227,.28));}
+  .nav-links{display:flex;align-items:center;gap:24px;font-size:14px;color:var(--text-dim);}
+  .nav-links a{transition:color .2s ease;}
+  .nav-links a:hover{color:var(--text);}
+  .nav-cta{display:flex;align-items:center;gap:6px;padding:8px 16px;border-radius:999px;border:1px solid var(--border-strong);font-size:13px;font-weight:600;transition:border-color .2s ease, background-color .2s ease, transform .2s ease;}
+  .nav-cta:hover{background-color:rgba(0,0,0,.04);transform:translateY(-1px);}
+  @media (max-width:720px){ .nav-links a:not(.nav-cta){display:none;} }
+
+  header.hero{padding:150px 0 60px;text-align:center;}
+  .eyebrow{display:inline-flex;align-items:center;gap:8px;padding:6px 14px;border-radius:999px;border:1px solid var(--border-strong);background:rgba(0,113,227,.06);font-size:12.5px;color:var(--text-dim);}
+  .eyebrow .dot{width:6px;height:6px;border-radius:50%;background:var(--accent-3);box-shadow:0 0 0 0 rgba(0,180,166,.6);animation:pulse 2s ease-in-out infinite;}
+  @keyframes pulse{0%{box-shadow:0 0 0 0 rgba(0,180,166,.5);}70%{box-shadow:0 0 0 8px rgba(0,180,166,0);}100%{box-shadow:0 0 0 0 rgba(0,180,166,0);}}
+  h1.headline{margin:26px auto 0;max-width:720px;font-size:clamp(32px,5.5vw,54px);line-height:1.14;letter-spacing:-.03em;font-weight:800;}
+  h1.headline .grad{background:linear-gradient(100deg, var(--accent), var(--accent-2) 55%, var(--accent-3));-webkit-background-clip:text;background-clip:text;color:transparent;}
+  p.subhead{margin:22px auto 0;max-width:560px;font-size:17px;line-height:1.65;color:var(--text-dim);}
+  .hero-ctas{margin-top:34px;display:flex;gap:14px;justify-content:center;flex-wrap:wrap;}
+
+  .btn{display:inline-flex;align-items:center;gap:8px;padding:13px 22px;border-radius:12px;font-size:14.5px;font-weight:600;transition:transform .25s cubic-bezier(.2,.8,.2,1), box-shadow .25s ease, background .25s ease;}
+  .btn-primary{background:var(--accent);color:#fff;box-shadow:0 10px 26px -8px rgba(13,112,255,.45);}
+  .btn-primary:hover{transform:translateY(-2px) scale(1.02);box-shadow:0 16px 32px -8px rgba(13,112,255,.55);background:#0a5fdb;}
+  .btn-ghost{background:rgba(0,0,0,.03);border:1px solid var(--border-strong);color:var(--text);}
+  .btn-ghost:hover{background:rgba(0,0,0,.05);transform:translateY(-2px);}
+  button.btn{border:none;font-family:inherit;cursor:pointer;}
+  button.btn[aria-busy="true"]{opacity:.75;cursor:progress;}
+
+  section{padding:80px 0;}
+  .section-head{text-align:center;max-width:620px;margin:0 auto 48px;}
+  .kicker{font-size:12.5px;font-weight:700;letter-spacing:.14em;text-transform:uppercase;color:var(--accent);}
+  h2{margin:12px 0 0;font-size:clamp(24px,4vw,34px);letter-spacing:-.02em;font-weight:800;}
+  .section-head p{margin:14px 0 0;color:var(--text-dim);font-size:15.5px;line-height:1.7;}
+  .section-head p a{color:var(--accent);text-decoration:underline;text-underline-offset:2px;}
+
+  /* ---------- compare table ---------- */
+  .compare{
+    max-width:760px;margin:0 auto;
+    border-radius:20px;
+    border:1px solid var(--border);
+    overflow:hidden;
+    background:var(--surface);
+  }
+  .compare-row{
+    display:grid;grid-template-columns:1fr 96px 128px;
+    align-items:center;
+    padding:14px 22px;
+    font-size:14px;
+    border-bottom:1px solid var(--border);
+  }
+  .compare-row:last-child{border-bottom:none;}
+  .compare-row.head{
+    background:var(--bg-2);
+    font-weight:700;
+    font-size:12.5px;
+    letter-spacing:.03em;
+    color:var(--text-dim);
+    text-transform:uppercase;
+  }
+  .compare-row .feat{color:var(--text);}
+  .compare-row.head .feat{color:var(--text-dim);}
+  .compare-cell{text-align:center;color:var(--text-dim);font-size:13.5px;}
+  .compare-row.head .compare-cell{text-align:center;}
+  .compare-cell.pro{color:var(--accent);font-weight:700;}
+  .compare-cell svg{width:16px;height:16px;margin:0 auto;stroke:var(--accent-3);}
+  @media (max-width:560px){
+    .compare-row{grid-template-columns:1fr 64px 84px;padding:12px 14px;font-size:13px;}
+  }
+
+  /* ---------- pricing ---------- */
+  .pricing-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:18px;max-width:960px;margin:0 auto;}
+  @media (max-width:860px){ .pricing-grid{grid-template-columns:1fr;max-width:420px;} }
+  .price-card{padding:32px 26px;border-radius:20px;background:linear-gradient(180deg, var(--surface), var(--surface-2));border:1px solid var(--border);text-align:center;transition:transform .3s cubic-bezier(.2,.8,.2,1), border-color .3s ease, box-shadow .3s ease;position:relative;}
+  @media (hover:hover){ .price-card:hover{transform:translateY(-4px);border-color:var(--border-strong);box-shadow:0 24px 50px -28px rgba(0,0,0,.18);} }
+  .price-card.featured{border-color:rgba(13,112,255,.35);box-shadow:0 24px 50px -28px rgba(13,112,255,.25);}
+  .price-card .badge{position:absolute;top:-12px;left:50%;transform:translateX(-50%);background:var(--accent);color:#fff;font-size:11.5px;font-weight:700;padding:4px 12px;border-radius:999px;letter-spacing:.02em;}
+  .price-card h3{margin:0 0 4px;font-size:14px;font-weight:700;color:var(--text-dim);text-transform:uppercase;letter-spacing:.06em;}
+  .price-card .devices{margin:0 0 20px;font-size:13px;color:var(--text-dimmer);}
+  .price-old{font-size:15px;color:var(--text-dimmer);text-decoration:line-through;}
+  .price-now{display:block;margin:4px 0 4px;font-size:38px;font-weight:800;letter-spacing:-.02em;}
+  .price-now sup{font-size:16px;font-weight:700;margin-right:2px;}
+  .price-note{margin:0 0 22px;font-size:12.5px;color:var(--text-dimmer);}
+  .price-card .btn{width:100%;justify-content:center;}
+  .pricing-foot{max-width:620px;margin:36px auto 0;text-align:center;font-size:13px;line-height:1.8;color:var(--text-dimmer);}
+  .pricing-foot a{color:var(--accent);text-decoration:underline;text-underline-offset:2px;}
+
+  /* ---------- why lifetime ---------- */
+  .why-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:18px;max-width:960px;margin:0 auto;}
+  @media (max-width:860px){ .why-grid{grid-template-columns:1fr;} }
+  .why-card{padding:24px 22px;border-radius:16px;background:var(--surface-2);border:1px solid var(--border);}
+  .why-card svg{width:24px;height:24px;stroke:var(--accent);margin-bottom:12px;}
+  .why-card h3{margin:0 0 8px;font-size:15px;font-weight:700;}
+  .why-card p{margin:0;font-size:13.5px;line-height:1.65;color:var(--text-dim);}
+
+  /* ---------- faq ---------- */
+  .faq-list{max-width:680px;margin:0 auto;display:flex;flex-direction:column;gap:10px;}
+  .faq-item{border:1px solid var(--border);border-radius:14px;background:var(--surface);overflow:hidden;transition:border-color .25s ease, box-shadow .25s ease;}
+  .faq-item:hover{border-color:var(--border-strong);}
+  .faq-item[open]{border-color:var(--border-strong);box-shadow:0 12px 30px -18px rgba(0,0,0,.14);}
+  .faq-item summary{list-style:none;cursor:pointer;display:flex;align-items:center;justify-content:space-between;gap:16px;padding:18px 20px;font-size:14.5px;font-weight:600;}
+  .faq-item summary::-webkit-details-marker{display:none;}
+  .faq-toggle{flex:0 0 auto;width:22px;height:22px;border-radius:50%;background:var(--bg-2);position:relative;transition:transform .3s cubic-bezier(.2,.8,.2,1), background .25s ease;}
+  .faq-toggle::before,.faq-toggle::after{content:"";position:absolute;top:50%;left:50%;background:var(--text);transform:translate(-50%,-50%);transition:opacity .2s ease;}
+  .faq-toggle::before{width:9px;height:1.6px;}
+  .faq-toggle::after{width:1.6px;height:9px;}
+  .faq-item[open] .faq-toggle{transform:rotate(45deg);background:rgba(13,112,255,.1);}
+  .faq-item[open] .faq-toggle::before,.faq-item[open] .faq-toggle::after{background:var(--accent);}
+  .faq-item p{margin:0;padding:0 20px 20px;font-size:13.5px;line-height:1.75;color:var(--text-dim);}
+  .faq-item p a{color:var(--accent);text-decoration:underline;text-underline-offset:2px;}
+
+  footer{padding:44px 0 60px;text-align:center;color:var(--text-dimmer);font-size:13px;}
+  footer a{color:var(--text-dim);transition:color .2s ease;}
+  footer a:hover{color:var(--text);}
+  footer .footer-copy{margin-top:10px;font-size:12px;}
+</style>
+</head>
+<body>
+
+<div class="bg-blobs">
+  <div class="blob blob-1"></div>
+  <div class="blob blob-2"></div>
+</div>
+
+<nav id="nav">
+  <div class="wrap nav-inner">
+    <a class="brand" href="index.html">
+      <img class="brand-mark" src="assets/icon-128.png" alt="PiPanel" width="28" height="28">
+      PiPanel
+    </a>
+    <div class="nav-links">
+      <a href="index.html#features">功能</a>
+      <a href="#pricing">价格</a>
+      <a href="#faq">FAQ</a>
+      <a class="nav-cta" href="https://github.com/Lyle-xub/PiPanel" target="_blank" rel="noopener">
+        <svg viewBox="0 0 16 16" fill="currentColor"><path d="M8 0C3.58 0 0 3.58 0 8c0 3.54 2.29 6.53 5.47 7.59.4.07.55-.17.55-.38 0-.19-.01-.82-.01-1.49-2.01.37-2.53-.49-2.69-.94-.09-.23-.48-.94-.82-1.13-.28-.15-.68-.52-.01-.53.63-.01 1.08.58 1.23.82.72 1.21 1.87.87 2.33.66.07-.52.28-.87.51-1.07-1.78-.2-3.64-.89-3.64-3.95 0-.87.31-1.59.82-2.15-.08-.2-.36-1.02.08-2.12 0 0 .67-.21 2.2.82.64-.18 1.32-.27 2-.27.68 0 1.36.09 2 .27 1.53-1.04 2.2-.82 2.2-.82.44 1.1.16 1.92.08 2.12.51.56.82 1.27.82 2.15 0 3.07-1.87 3.75-3.65 3.95.29.25.54.73.54 1.48 0 1.07-.01 1.93-.01 2.2 0 .21.15.46.55.38A8.01 8.01 0 0 0 16 8c0-4.42-3.58-8-8-8z"/></svg>
+        GitHub
+      </a>
+    </div>
+  </div>
+</nav>
+
+<header class="hero">
+  <div class="wrap">
+    <span class="eyebrow"><span class="dot"></span> 买断制 · 无订阅 · 终身有效</span>
+    <h1 class="headline">一次购买，<span class="grad">终身解锁</span> PiPanel 专业版</h1>
+    <p class="subhead">核心画中画功能永远免费。买断版一次性付费，永久解锁全部自定义设置，并包含未来所有版本更新——不是订阅，不会按月/按年自动扣费。</p>
+    <div class="hero-ctas">
+      <a class="btn btn-primary" href="#pricing">查看价格</a>
+      <a class="btn btn-ghost" href="index.html">返回首页</a>
+    </div>
+  </div>
+</header>
+
+<section id="compare">
+  <div class="wrap">
+    <div class="section-head">
+      <span class="kicker">Free vs Buyout</span>
+      <h2>免费版已经很好用，买断版更进一步</h2>
+      <p>核心画中画体验对所有人永久免费，买断版只解锁进阶自定义能力。</p>
+    </div>
+    <div class="compare">
+      <div class="compare-row head">
+        <div class="feat">功能</div>
+        <div class="compare-cell">免费版</div>
+        <div class="compare-cell">买断版</div>
+      </div>
+      <div class="compare-row">
+        <div class="feat">一甩即成画中画</div>
+        <div class="compare-cell"><svg viewBox="0 0 24 24" fill="none" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6 9 17l-5-5"/></svg></div>
+        <div class="compare-cell pro"><svg viewBox="0 0 24 24" fill="none" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="stroke:var(--accent)"><path d="M20 6 9 17l-5-5"/></svg></div>
+      </div>
+      <div class="compare-row">
+        <div class="feat">直接交互（鼠标/键盘转发）</div>
+        <div class="compare-cell"><svg viewBox="0 0 24 24" fill="none" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6 9 17l-5-5"/></svg></div>
+        <div class="compare-cell pro"><svg viewBox="0 0 24 24" fill="none" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="stroke:var(--accent)"><path d="M20 6 9 17l-5-5"/></svg></div>
+      </div>
+      <div class="compare-row">
+        <div class="feat">开机启动 / 自动归还焦点</div>
+        <div class="compare-cell"><svg viewBox="0 0 24 24" fill="none" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6 9 17l-5-5"/></svg></div>
+        <div class="compare-cell pro"><svg viewBox="0 0 24 24" fill="none" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="stroke:var(--accent)"><path d="M20 6 9 17l-5-5"/></svg></div>
+      </div>
+      <div class="compare-row">
+        <div class="feat">自定义外观（圆角 / 阴影 / 堆叠角落）</div>
+        <div class="compare-cell">7 天试用</div>
+        <div class="compare-cell pro">永久解锁</div>
+      </div>
+      <div class="compare-row">
+        <div class="feat">自定义默认尺寸</div>
+        <div class="compare-cell">7 天试用</div>
+        <div class="compare-cell pro">永久解锁</div>
+      </div>
+      <div class="compare-row">
+        <div class="feat">未来所有版本更新</div>
+        <div class="compare-cell">核心功能</div>
+        <div class="compare-cell pro">全部包含</div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<section id="pricing">
+  <div class="wrap">
+    <div class="section-head">
+      <span class="kicker">Pricing</span>
+      <h2>选择适合你的套餐</h2>
+      <p>三档均为一次性买断价，按可激活的设备数量区分，包含所有未来更新。购买通过 <a href="https://www.creem.io" target="_blank" rel="noopener">Creem</a> 处理付款。</p>
+    </div>
+
+    <div class="pricing-grid">
+      <div class="price-card">
+        <h3>单设备</h3>
+        <p class="devices">在 1 台 Mac 上激活</p>
+        <span class="price-old">$14.99</span>
+        <span class="price-now"><sup>$</sup>9.99</span>
+        <p class="price-note">买断价，包含所有未来更新</p>
+        <button type="button" class="btn btn-primary" onclick="startCheckout('single', this)">立即购买</button>
+      </div>
+      <div class="price-card featured">
+        <span class="badge">最多人选择</span>
+        <h3>双设备</h3>
+        <p class="devices">在 2 台 Mac 上激活</p>
+        <span class="price-old">$22.99</span>
+        <span class="price-now"><sup>$</sup>14.98</span>
+        <p class="price-note">买断价，包含所有未来更新</p>
+        <button type="button" class="btn btn-primary" onclick="startCheckout('dual', this)">立即购买</button>
+      </div>
+      <div class="price-card">
+        <h3>多设备</h3>
+        <p class="devices">适合 3 台及以上 Mac</p>
+        <span class="price-old">$41.99</span>
+        <span class="price-now"><sup>$</sup>25.99</span>
+        <p class="price-note">买断价，包含所有未来更新</p>
+        <button type="button" class="btn btn-primary" onclick="startCheckout('multi', this)">立即购买</button>
+      </div>
+    </div>
+
+    <p class="pricing-foot">
+      付款完成后，授权码会自动发送到你的付款邮箱，打开 App 的「设置 → 会员」粘贴激活即可。换了新 Mac？可以在旧设备的「设置 → 会员 → 设备管理」里自助转移激活名额。由于已提供完整的 7 天免费试用，购买后不支持退款，详见 <a href="refund.html">Refund Policy</a>。
+    </p>
+  </div>
+</section>
+
+<section id="why">
+  <div class="wrap">
+    <div class="section-head">
+      <span class="kicker">Why buyout</span>
+      <h2>为什么是买断，而不是订阅</h2>
+    </div>
+    <div class="why-grid">
+      <div class="why-card">
+        <svg viewBox="0 0 24 24" fill="none" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M12 2l9 4.9V17L12 22l-9-5.1V6.9L12 2z"/><path d="M12 22V12M21 6.9 12 12 3 6.9"/></svg>
+        <h3>一次付费，没有隐藏续费</h3>
+        <p>没有月费、年费，也不会自动扣款。付一次钱，这个授权就一直属于你。</p>
+      </div>
+      <div class="why-card">
+        <svg viewBox="0 0 24 24" fill="none" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 3"/></svg>
+        <h3>包含所有未来更新</h3>
+        <p>买断之后，未来发布的每个新版本都免费获得，不需要额外支付"升级费"。</p>
+      </div>
+      <div class="why-card">
+        <svg viewBox="0 0 24 24" fill="none" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="18" height="14" rx="2"/><path d="M8 21h8M12 18v3"/></svg>
+        <h3>换设备也不吃亏</h3>
+        <p>在「设置 → 会员 → 设备管理」里自助移出旧设备、激活新设备，全程不需要联系开发者。</p>
+      </div>
+    </div>
+  </div>
+</section>
+
+<section id="faq">
+  <div class="wrap">
+    <div class="section-head">
+      <span class="kicker">FAQ</span>
+      <h2>关于买断版的常见问题</h2>
+    </div>
+    <div class="faq-list">
+
+      <details class="faq-item">
+        <summary>
+          <span>授权码怎么获取，在哪里激活？</span>
+          <span class="faq-toggle"></span>
+        </summary>
+        <p>通过上面的按钮完成 Creem 付款后，授权码会发送到你的付款邮箱。打开 App 的「设置 → 会员」，粘贴授权码即可激活对应数量的设备。</p>
+      </details>
+
+      <details class="faq-item">
+        <summary>
+          <span>一个授权码能在几台设备上使用？</span>
+          <span class="faq-toggle"></span>
+        </summary>
+        <p>按设备数量选择套餐：单设备（1 台）、双设备（2 台）或多设备（3 台及以上）。同一授权码可以在对应数量的 Mac 上同时激活。</p>
+      </details>
+
+      <details class="faq-item">
+        <summary>
+          <span>换了新 Mac 怎么办？</span>
+          <span class="faq-toggle"></span>
+        </summary>
+        <p>在旧设备的「设置 → 会员 → 设备管理」里移除该设备，就能腾出一个激活名额给新 Mac，全程在 App 内自助完成，不需要联系开发者。</p>
+      </details>
+
+      <details class="faq-item">
+        <summary>
+          <span>支持退款吗？</span>
+          <span class="faq-toggle"></span>
+        </summary>
+        <p>由于所有付费功能都提供了完整的 7 天免费试用，方便你在购买前充分确认是否适合自己的设备和工作流，因此购买后我们不提供退款。详见 <a href="refund.html">Refund Policy</a>。</p>
+      </details>
+
+      <details class="faq-item">
+        <summary>
+          <span>买断之后还能获得后续更新吗？</span>
+          <span class="faq-toggle"></span>
+        </summary>
+        <p>可以。一次性购买包含未来所有版本的更新，不需要额外付费，也没有单独的"升级费"。</p>
+      </details>
+
+      <details class="faq-item">
+        <summary>
+          <span>付款后没有立刻收到授权码怎么办？</span>
+          <span class="faq-toggle"></span>
+        </summary>
+        <p>邮件通常会在付款完成后几分钟内送达（注意查看垃圾邮件夹）。如果长时间没有收到，可以邮件联系 <a href="mailto:support@pipanel.app">support@pipanel.app</a>。</p>
+      </details>
+
+    </div>
+  </div>
+</section>
+
+<footer>
+  <div class="wrap">
+    <p>PiPanel 由 lylexub 独立开发，与 Apple 官方无关。</p>
+    <p style="margin-top:6px;">
+      <a href="index.html">首页</a>
+      ·
+      <a href="https://github.com/Lyle-xub/PiPanel" target="_blank" rel="noopener">GitHub</a>
+      ·
+      <a href="mailto:support@pipanel.app">Support</a>
+      ·
+      <a href="privacy.html">Privacy</a>
+      ·
+      <a href="terms.html">Terms</a>
+      ·
+      <a href="refund.html">Refund Policy</a>
+    </p>
+    <p class="footer-copy">support@pipanel.app · © 2026 lylexub</p>
+  </div>
+</footer>
+
+<script>
+  const LICENSE_WORKER = 'https://pipanel-license-server.lyle-xub.workers.dev';
+
+  async function startCheckout(tier, btn) {
+    const original = btn.innerHTML;
+    btn.disabled = true;
+    btn.setAttribute('aria-busy', 'true');
+    btn.textContent = '正在跳转到付款页面…';
+    try {
+      const claimToken = (crypto.randomUUID ? crypto.randomUUID() : `${Date.now()}-${Math.random().toString(16).slice(2)}`);
+      const res = await fetch(`${LICENSE_WORKER}/create-checkout-session`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ tier, claimToken }),
+      });
+      if (!res.ok) throw new Error('checkout creation failed');
+      const data = await res.json();
+      if (!data.url) throw new Error('missing checkout url');
+      window.location.href = data.url;
+    } catch (err) {
+      btn.disabled = false;
+      btn.removeAttribute('aria-busy');
+      btn.innerHTML = original;
+      alert('创建付款会话失败，请检查网络连接后重试。');
+    }
+  }
+
+  const nav = document.getElementById('nav');
+  const onScroll = () => nav.classList.toggle('scrolled', window.scrollY > 8);
+  document.addEventListener('scroll', onScroll, { passive: true });
+  onScroll();
+</script>
+
+</body>
+</html>

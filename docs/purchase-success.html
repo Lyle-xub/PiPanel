@@ -1,0 +1,132 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>支付成功 — PiPanel</title>
+<meta name="description" content="PiPanel 付款成功，授权码已发送到你的邮箱。">
+<meta name="robots" content="noindex">
+<link rel="icon" type="image/png" sizes="512x512" href="assets/icon-512.png">
+<link rel="icon" type="image/png" sizes="256x256" href="assets/icon-256.png">
+<link rel="icon" type="image/png" sizes="64x64" href="assets/icon-64.png">
+<link rel="apple-touch-icon" href="assets/icon-256.png">
+<link rel="stylesheet" href="assets/legal.css">
+<style>
+  .success{
+    padding:150px 0 100px;
+    text-align:center;
+  }
+  .success-icon{
+    width:72px;height:72px;
+    margin:0 auto 24px;
+    border-radius:50%;
+    display:flex;align-items:center;justify-content:center;
+    background:rgba(0,180,166,.12);
+  }
+  .success-icon svg{width:34px;height:34px;stroke:var(--accent-2, #00b4a6);}
+  .success h1{
+    margin:0 0 14px;
+    font-size:clamp(26px,4.5vw,36px);
+    letter-spacing:-.02em;
+    font-weight:800;
+  }
+  .success p{
+    max-width:480px;
+    margin:0 auto 10px;
+    color:var(--text-dim);
+    font-size:15px;
+    line-height:1.75;
+  }
+  .success .steps{
+    max-width:480px;
+    margin:28px auto 0;
+    text-align:left;
+    padding:20px 24px;
+    border-radius:16px;
+    background:var(--bg-2);
+    border:1px solid var(--border);
+  }
+  .success .steps ol{margin:0;padding-left:20px;}
+  .success .steps li{margin-bottom:10px;font-size:14px;line-height:1.6;color:var(--text-dim);}
+  .success .steps li:last-child{margin-bottom:0;}
+  .success .actions{
+    margin-top:32px;
+    display:flex;gap:14px;justify-content:center;flex-wrap:wrap;
+  }
+  .btn{
+    display:inline-flex;align-items:center;gap:8px;
+    padding:13px 22px;border-radius:12px;
+    font-size:14.5px;font-weight:600;
+  }
+  .btn-primary{background:var(--accent);color:#fff;}
+  .btn-ghost{background:rgba(0,0,0,.03);border:1px solid var(--border-strong);color:var(--text);}
+</style>
+</head>
+<body>
+
+<nav id="nav">
+  <div class="wrap nav-inner">
+    <a class="brand" href="index.html">
+      <img class="brand-mark" src="assets/icon-128.png" alt="PiPanel" width="28" height="28">
+      PiPanel
+    </a>
+    <div class="nav-links">
+      <a href="index.html#features">功能</a>
+      <a href="buyout.html">买断版</a>
+      <a class="nav-cta" href="https://github.com/Lyle-xub/PiPanel" target="_blank" rel="noopener">GitHub</a>
+    </div>
+  </div>
+</nav>
+
+<main class="success">
+  <div class="wrap">
+    <div class="success-icon">
+      <svg viewBox="0 0 24 24" fill="none" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6 9 17l-5-5"/></svg>
+    </div>
+    <h1>支付成功</h1>
+    <p>感谢购买 PiPanel 专业版！你的授权码已经发送到刚才付款时使用的邮箱，请查收（有时可能被归到垃圾邮件夹）。</p>
+
+    <div class="steps">
+      <ol>
+        <li>打开邮箱，找到主题为「PiPanel 授权码」的邮件。</li>
+        <li>打开 PiPanel，进入「设置 → 会员」。</li>
+        <li>粘贴邮件中的授权码，点击激活即可。</li>
+      </ol>
+    </div>
+
+    <p style="margin-top:24px;">如果几分钟内还没收到邮件，也可以在 App 的「设置 → 会员 → 已有许可证？→ 找回授权」里用购买时的邮箱重新找回，或直接联系 <a href="mailto:support@pipanel.app" style="color:var(--accent);text-decoration:underline;">support@pipanel.app</a>。</p>
+
+    <div class="actions">
+      <a class="btn btn-primary" href="index.html">返回首页</a>
+      <a class="btn btn-ghost" href="https://github.com/Lyle-xub/PiPanel/releases" target="_blank" rel="noopener">下载 PiPanel</a>
+    </div>
+  </div>
+</main>
+
+<footer>
+  <div class="wrap">
+    <p>PiPanel 由 lylexub 独立开发，与 Apple 官方无关。</p>
+    <p style="margin-top:6px;">
+      <a href="https://github.com/Lyle-xub/PiPanel" target="_blank" rel="noopener">GitHub</a>
+      ·
+      <a href="mailto:support@pipanel.app">Support</a>
+      ·
+      <a href="privacy.html">Privacy</a>
+      ·
+      <a href="terms.html">Terms</a>
+      ·
+      <a href="refund.html">Refund Policy</a>
+    </p>
+    <p class="footer-copy">support@pipanel.app · © 2026 lylexub</p>
+  </div>
+</footer>
+
+<script>
+  const nav = document.getElementById('nav');
+  const onScroll = () => nav.classList.toggle('scrolled', window.scrollY > 8);
+  document.addEventListener('scroll', onScroll, { passive: true });
+  onScroll();
+</script>
+
+</body>
+</html>

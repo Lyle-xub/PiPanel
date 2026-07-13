@@ -269,6 +269,8 @@
   }
   .btn-ghost:hover{background:rgba(0,0,0,.05);transform:translateY(-2px);}
   .btn svg{width:16px;height:16px;}
+  button.btn{border:none;font-family:inherit;cursor:pointer;}
+  button.btn[aria-busy="true"]{opacity:.75;cursor:progress;}
 
   /* ---------- hero demo (animated PiP illustration) ---------- */
   .demo-stage{
@@ -451,6 +453,7 @@
     font-size:15.5px;
     line-height:1.7;
   }
+  .section-head p a{color:var(--accent);text-decoration:underline;text-underline-offset:2px;}
 
   .reveal{
     opacity:0;
@@ -714,6 +717,7 @@
     <div class="nav-links">
       <a href="#features">功能</a>
       <a href="#pricing">价格</a>
+      <a href="buyout.html">买断版</a>
       <a href="#faq">FAQ</a>
       <a href="#opensource">开源</a>
       <a class="nav-cta" href="https://github.com/Lyle-xub/PiPanel" target="_blank" rel="noopener">
@@ -883,7 +887,7 @@
     <div class="section-head reveal">
       <span class="kicker">Pricing</span>
       <h2>一次买断，终身使用</h2>
-      <p>核心画中画功能与开机启动永久免费。进阶自定义设置（外观、默认尺寸等）可以先免费试用 7 天，满意后再一次性购买——没有订阅，不会自动扣费。</p>
+      <p>核心画中画功能与开机启动永久免费。进阶自定义设置（外观、默认尺寸等）一次性购买即可终身解锁，没有订阅，不会自动扣费。点击下方按钮通过 Creem 安全付款。<br>还没决定？可以先<a href="https://github.com/Lyle-xub/PiPanel/releases" target="_blank" rel="noopener">下载试用 7 天</a>，或查看<a href="buyout.html">买断版详情</a>。</p>
     </div>
 
     <div class="pricing-grid">
@@ -893,7 +897,7 @@
         <span class="price-old">$14.99</span>
         <span class="price-now"><sup>$</sup>9.99</span>
         <p class="price-note">买断价，包含所有未来更新</p>
-        <a class="btn btn-primary" href="https://github.com/Lyle-xub/PiPanel/releases" target="_blank" rel="noopener">免费试用 7 天</a>
+        <button type="button" class="btn btn-primary" onclick="startCheckout('single', this)">立即购买</button>
       </div>
       <div class="price-card reveal">
         <h3>双设备</h3>
@@ -901,7 +905,7 @@
         <span class="price-old">$22.99</span>
         <span class="price-now"><sup>$</sup>14.98</span>
         <p class="price-note">买断价，包含所有未来更新</p>
-        <a class="btn btn-primary" href="https://github.com/Lyle-xub/PiPanel/releases" target="_blank" rel="noopener">免费试用 7 天</a>
+        <button type="button" class="btn btn-primary" onclick="startCheckout('dual', this)">立即购买</button>
       </div>
       <div class="price-card reveal">
         <h3>多设备</h3>
@@ -909,12 +913,12 @@
         <span class="price-old">$41.99</span>
         <span class="price-now"><sup>$</sup>25.99</span>
         <p class="price-note">买断价，包含所有未来更新</p>
-        <a class="btn btn-primary" href="https://github.com/Lyle-xub/PiPanel/releases" target="_blank" rel="noopener">免费试用 7 天</a>
+        <button type="button" class="btn btn-primary" onclick="startCheckout('multi', this)">立即购买</button>
       </div>
     </div>
 
     <p class="pricing-foot">
-      已购买？在 App 的「设置 → 会员」里输入授权码即可激活。换了新 Mac？可以在旧设备的「设置 → 会员 → 设备管理」里自助转移激活名额。由于已提供完整的 7 天免费试用，购买后不支持退款，详见 <a href="refund.html">Refund Policy</a>。
+      购买通过 <a href="https://www.creem.io" target="_blank" rel="noopener">Creem</a> 处理付款，授权码会在支付完成后发送到你的付款邮箱。已购买？在 App 的「设置 → 会员」里输入授权码即可激活。换了新 Mac？可以在旧设备的「设置 → 会员 → 设备管理」里自助转移激活名额。由于已提供完整的 7 天免费试用，购买后不支持退款，详见 <a href="refund.html">Refund Policy</a>。
     </p>
   </div>
 </section>
@@ -1037,6 +1041,8 @@
     <p style="margin-top:6px;">
       <a href="https://github.com/Lyle-xub/PiPanel" target="_blank" rel="noopener">GitHub</a>
       ·
+      <a href="buyout.html">买断版</a>
+      ·
       <a href="mailto:support@pipanel.app">Support</a>
       ·
       <a href="privacy.html">Privacy</a>
@@ -1050,6 +1056,35 @@
 </footer>
 
 <script>
+  // Creem checkout — creates a real checkout session via PiPanel's licensing worker and redirects
+  // the browser there. The license key is delivered by email once Creem's webhook fires (see
+  // Server/cloudflare-worker); purchase-success.html is where Creem sends people back afterwards.
+  const LICENSE_WORKER = 'https://pipanel-license-server.lyle-xub.workers.dev';
+
+  async function startCheckout(tier, btn) {
+    const original = btn.innerHTML;
+    btn.disabled = true;
+    btn.setAttribute('aria-busy', 'true');
+    btn.textContent = '正在跳转到付款页面…';
+    try {
+      const claimToken = (crypto.randomUUID ? crypto.randomUUID() : `${Date.now()}-${Math.random().toString(16).slice(2)}`);
+      const res = await fetch(`${LICENSE_WORKER}/create-checkout-session`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ tier, claimToken }),
+      });
+      if (!res.ok) throw new Error('checkout creation failed');
+      const data = await res.json();
+      if (!data.url) throw new Error('missing checkout url');
+      window.location.href = data.url;
+    } catch (err) {
+      btn.disabled = false;
+      btn.removeAttribute('aria-busy');
+      btn.innerHTML = original;
+      alert('创建付款会话失败，请检查网络连接后重试。');
+    }
+  }
+
   // nav background on scroll
   const nav = document.getElementById('nav');
   const onScroll = () => nav.classList.toggle('scrolled', window.scrollY > 8);
