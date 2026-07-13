@@ -1,0 +1,819 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>AnyPiP — 把任何窗口，变成画中画</title>
+<meta name="description" content="AnyPiP 是一个 macOS 菜单栏应用，可以把任意窗口拖拽成可移动、可缩放、可交互的画中画悬浮窗。开源、免费、原生体验。">
+<style>
+  :root{
+    --bg:#08090c;
+    --bg-2:#0d0f14;
+    --surface:#12141b;
+    --surface-2:#181b24;
+    --border:rgba(255,255,255,.08);
+    --border-strong:rgba(255,255,255,.16);
+    --text:#f2f3f5;
+    --text-dim:#9a9ea8;
+    --text-dimmer:#6b7078;
+    --accent:#7c8cff;
+    --accent-2:#c46bff;
+    --accent-3:#4fd6c9;
+    --radius:20px;
+  }
+  *{box-sizing:border-box;}
+  html{scroll-behavior:smooth;}
+  body{
+    margin:0;
+    background:var(--bg);
+    color:var(--text);
+    font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,"PingFang SC","Microsoft YaHei",sans-serif;
+    -webkit-font-smoothing:antialiased;
+    overflow-x:hidden;
+  }
+  a{color:inherit;text-decoration:none;}
+  img,svg{display:block;max-width:100%;}
+
+  @media (prefers-reduced-motion: reduce){
+    *{animation-duration:.001ms !important;animation-iteration-count:1 !important;transition-duration:.001ms !important;}
+  }
+
+  /* ---------- background ambience ---------- */
+  .bg-blobs{
+    position:fixed;
+    inset:0;
+    z-index:0;
+    overflow:hidden;
+    pointer-events:none;
+  }
+  .blob{
+    position:absolute;
+    border-radius:50%;
+    filter:blur(90px);
+    opacity:.55;
+    will-change:transform;
+  }
+  .blob-1{
+    width:640px;height:640px;
+    top:-220px;left:-160px;
+    background:radial-gradient(circle at 30% 30%, var(--accent), transparent 70%);
+    animation:float1 26s ease-in-out infinite;
+  }
+  .blob-2{
+    width:560px;height:560px;
+    top:120px;right:-220px;
+    background:radial-gradient(circle at 60% 40%, var(--accent-2), transparent 70%);
+    animation:float2 32s ease-in-out infinite;
+  }
+  .blob-3{
+    width:520px;height:520px;
+    bottom:-260px;left:35%;
+    background:radial-gradient(circle at 50% 50%, var(--accent-3), transparent 70%);
+    animation:float3 30s ease-in-out infinite;
+  }
+  @keyframes float1{
+    0%,100%{transform:translate(0,0) scale(1);}
+    50%{transform:translate(60px,80px) scale(1.15);}
+  }
+  @keyframes float2{
+    0%,100%{transform:translate(0,0) scale(1);}
+    50%{transform:translate(-70px,60px) scale(0.9);}
+  }
+  @keyframes float3{
+    0%,100%{transform:translate(0,0) scale(1);}
+    50%{transform:translate(40px,-60px) scale(1.1);}
+  }
+
+  .cursor-glow{
+    position:fixed;
+    width:420px;height:420px;
+    border-radius:50%;
+    background:radial-gradient(circle, rgba(124,140,255,.10), transparent 70%);
+    pointer-events:none;
+    z-index:1;
+    transform:translate(-50%,-50%);
+    transition:opacity .3s ease;
+    will-change:transform;
+  }
+
+  .wrap{
+    position:relative;
+    z-index:2;
+    max-width:1120px;
+    margin:0 auto;
+    padding:0 28px;
+  }
+
+  /* ---------- nav ---------- */
+  nav{
+    position:fixed;
+    top:0;left:0;right:0;
+    z-index:50;
+    padding:18px 0;
+    transition:background-color .35s ease, border-color .35s ease, backdrop-filter .35s ease;
+    border-bottom:1px solid transparent;
+  }
+  nav.scrolled{
+    background-color:rgba(8,9,12,.72);
+    backdrop-filter:blur(16px) saturate(160%);
+    -webkit-backdrop-filter:blur(16px) saturate(160%);
+    border-bottom-color:var(--border);
+  }
+  .nav-inner{
+    display:flex;
+    align-items:center;
+    justify-content:space-between;
+  }
+  .brand{
+    display:flex;
+    align-items:center;
+    gap:10px;
+    font-weight:700;
+    font-size:16px;
+    letter-spacing:-.01em;
+  }
+  .brand-mark{
+    width:30px;height:30px;
+    border-radius:9px;
+    background:linear-gradient(135deg, var(--accent), var(--accent-2));
+    display:flex;align-items:center;justify-content:center;
+    box-shadow:0 4px 16px rgba(124,140,255,.35);
+  }
+  .brand-mark svg{width:16px;height:16px;}
+  .nav-links{
+    display:flex;
+    align-items:center;
+    gap:28px;
+    font-size:14px;
+    color:var(--text-dim);
+  }
+  .nav-links a{transition:color .2s ease;}
+  .nav-links a:hover{color:var(--text);}
+  .nav-cta{
+    display:flex;
+    align-items:center;
+    gap:6px;
+    padding:8px 16px;
+    border-radius:999px;
+    border:1px solid var(--border-strong);
+    font-size:13px;
+    font-weight:600;
+    transition:border-color .2s ease, background-color .2s ease, transform .2s ease;
+  }
+  .nav-cta:hover{background-color:rgba(255,255,255,.06);transform:translateY(-1px);}
+  @media (max-width:720px){ .nav-links a:not(.nav-cta){display:none;} }
+
+  /* ---------- hero ---------- */
+  header.hero{
+    padding:168px 0 90px;
+    text-align:center;
+  }
+  .eyebrow{
+    display:inline-flex;
+    align-items:center;
+    gap:8px;
+    padding:6px 14px;
+    border-radius:999px;
+    border:1px solid var(--border-strong);
+    background:rgba(124,140,255,.08);
+    font-size:12.5px;
+    color:var(--text-dim);
+    opacity:0;
+    animation:rise .8s ease forwards;
+  }
+  .eyebrow .dot{
+    width:6px;height:6px;border-radius:50%;
+    background:var(--accent-3);
+    box-shadow:0 0 0 0 rgba(79,214,201,.6);
+    animation:pulse 2s ease-in-out infinite;
+  }
+  @keyframes pulse{
+    0%{box-shadow:0 0 0 0 rgba(79,214,201,.5);}
+    70%{box-shadow:0 0 0 8px rgba(79,214,201,0);}
+    100%{box-shadow:0 0 0 0 rgba(79,214,201,0);}
+  }
+  h1.headline{
+    margin:26px auto 0;
+    max-width:780px;
+    font-size:clamp(34px,6vw,60px);
+    line-height:1.12;
+    letter-spacing:-.03em;
+    font-weight:800;
+    opacity:0;
+    animation:rise .9s ease .08s forwards;
+  }
+  h1.headline .grad{
+    background:linear-gradient(100deg, var(--accent), var(--accent-2) 55%, var(--accent-3));
+    -webkit-background-clip:text;
+    background-clip:text;
+    color:transparent;
+    background-size:200% 100%;
+    animation:sheen 6s linear infinite;
+  }
+  @keyframes sheen{
+    0%{background-position:0% 50%;}
+    100%{background-position:200% 50%;}
+  }
+  p.subhead{
+    margin:22px auto 0;
+    max-width:560px;
+    font-size:17px;
+    line-height:1.65;
+    color:var(--text-dim);
+    opacity:0;
+    animation:rise .9s ease .16s forwards;
+  }
+  @keyframes rise{
+    from{opacity:0;transform:translateY(18px);}
+    to{opacity:1;transform:translateY(0);}
+  }
+  .hero-ctas{
+    margin-top:34px;
+    display:flex;
+    gap:14px;
+    justify-content:center;
+    flex-wrap:wrap;
+    opacity:0;
+    animation:rise .9s ease .24s forwards;
+  }
+  .btn{
+    display:inline-flex;
+    align-items:center;
+    gap:8px;
+    padding:13px 22px;
+    border-radius:12px;
+    font-size:14.5px;
+    font-weight:600;
+    transition:transform .25s cubic-bezier(.2,.8,.2,1), box-shadow .25s ease, background .25s ease;
+  }
+  .btn-primary{
+    background:linear-gradient(135deg, var(--accent), var(--accent-2));
+    color:#fff;
+    box-shadow:0 10px 30px -8px rgba(124,140,255,.55);
+  }
+  .btn-primary:hover{transform:translateY(-2px) scale(1.02);box-shadow:0 16px 36px -8px rgba(124,140,255,.65);}
+  .btn-ghost{
+    background:rgba(255,255,255,.04);
+    border:1px solid var(--border-strong);
+    color:var(--text);
+  }
+  .btn-ghost:hover{background:rgba(255,255,255,.08);transform:translateY(-2px);}
+  .btn svg{width:16px;height:16px;}
+
+  /* ---------- hero demo (animated PiP illustration) ---------- */
+  .demo-stage{
+    position:relative;
+    margin:72px auto 0;
+    max-width:860px;
+    height:420px;
+    border-radius:24px;
+    border:1px solid var(--border);
+    background:
+      radial-gradient(circle at 20% 15%, rgba(124,140,255,.10), transparent 45%),
+      radial-gradient(circle at 85% 80%, rgba(196,107,255,.10), transparent 45%),
+      linear-gradient(180deg, var(--surface), var(--bg-2));
+    overflow:hidden;
+    opacity:0;
+    animation:rise 1s ease .34s forwards;
+    box-shadow:0 40px 80px -30px rgba(0,0,0,.6);
+  }
+  .demo-stage::before{
+    content:"";
+    position:absolute;inset:0;
+    background-image:
+      linear-gradient(to right, rgba(255,255,255,.035) 1px, transparent 1px),
+      linear-gradient(to bottom, rgba(255,255,255,.035) 1px, transparent 1px);
+    background-size:36px 36px;
+    mask-image:radial-gradient(circle at 50% 40%, black, transparent 75%);
+  }
+  .menubar{
+    position:absolute;top:0;left:0;right:0;height:34px;
+    background:rgba(255,255,255,.03);
+    border-bottom:1px solid var(--border);
+    display:flex;align-items:center;
+    padding:0 16px;
+    gap:8px;
+  }
+  .menubar .traffic{width:8px;height:8px;border-radius:50%;background:rgba(255,255,255,.15);}
+  .menubar .pip-icon{
+    margin-left:auto;
+    width:16px;height:16px;
+    border-radius:4px;
+    background:linear-gradient(135deg, var(--accent), var(--accent-2));
+  }
+
+  .source-window{
+    position:absolute;
+    top:78px;left:64px;
+    width:300px;height:200px;
+    border-radius:12px;
+    background:var(--surface-2);
+    border:1px solid var(--border-strong);
+    box-shadow:0 20px 45px -20px rgba(0,0,0,.7);
+    animation:sourceLoop 7s cubic-bezier(.65,0,.35,1) infinite;
+  }
+  .source-window .titlebar{
+    height:26px;
+    display:flex;align-items:center;gap:6px;
+    padding:0 12px;
+    border-bottom:1px solid var(--border);
+  }
+  .source-window .titlebar span{width:7px;height:7px;border-radius:50%;background:rgba(255,255,255,.18);}
+  .source-window .body{padding:14px;display:flex;flex-direction:column;gap:8px;}
+  .source-window .line{height:8px;border-radius:5px;background:rgba(255,255,255,.08);}
+  .source-window .line.w1{width:70%;}
+  .source-window .line.w2{width:90%;}
+  .source-window .line.w3{width:55%;}
+
+  @keyframes sourceLoop{
+    0%,18%{ transform:translate(0,0) scale(1); opacity:1; }
+    38%,62%{ transform:translate(0,0) scale(1); opacity:1; }
+    72%{ transform:translate(220px,140px) scale(.34); opacity:.0; }
+    100%{ transform:translate(0,0) scale(1); opacity:0; }
+  }
+
+  .pip-panel{
+    position:absolute;
+    right:36px;bottom:30px;
+    width:190px;height:126px;
+    border-radius:14px;
+    background:var(--surface-2);
+    border:1px solid rgba(255,255,255,.22);
+    box-shadow:0 25px 60px -20px rgba(124,140,255,.45), 0 0 0 1px rgba(255,255,255,.03);
+    overflow:hidden;
+    animation:pipLoop 7s cubic-bezier(.65,0,.35,1) infinite;
+  }
+  .pip-panel .pip-body{
+    position:absolute;inset:0;
+    padding:12px;
+    display:flex;flex-direction:column;gap:7px;
+  }
+  .pip-panel .line{height:6px;border-radius:4px;background:rgba(255,255,255,.14);}
+  .pip-panel .glow{
+    position:absolute;inset:0;
+    background:linear-gradient(135deg, rgba(124,140,255,.16), rgba(196,107,255,.10));
+    opacity:0;
+    animation:pipFlash 7s ease infinite;
+  }
+  .pip-panel .resize-handle{
+    position:absolute;right:6px;bottom:6px;
+    width:10px;height:10px;
+    border-right:2px solid rgba(255,255,255,.35);
+    border-bottom:2px solid rgba(255,255,255,.35);
+    border-radius:0 0 3px 0;
+  }
+  @keyframes pipLoop{
+    0%,68%{ transform:scale(.001); opacity:0; }
+    76%{ transform:scale(1); opacity:1; }
+    88%{ transform:scale(1.16,1.28); opacity:1; }
+    96%,100%{ transform:scale(1); opacity:1; }
+  }
+  @keyframes pipFlash{
+    0%,74%{opacity:0;}
+    78%{opacity:1;}
+    86%{opacity:0;}
+  }
+
+  .cursor-dot{
+    position:absolute;
+    width:14px;height:14px;
+    border-radius:50%;
+    background:#fff;
+    box-shadow:0 0 0 4px rgba(255,255,255,.15), 0 4px 14px rgba(0,0,0,.4);
+    animation:cursorLoop 7s cubic-bezier(.65,0,.35,1) infinite;
+  }
+  @keyframes cursorLoop{
+    0%,18%{ top:170px; left:180px; opacity:0;}
+    22%{ opacity:1; top:170px; left:180px; }
+    38%{ top:170px; left:180px; }
+    58%{ top:220px; left:330px; }
+    72%{ top:255px; left:390px; opacity:1; }
+    76%,100%{ opacity:0; }
+  }
+
+  .caption-track{
+    position:absolute;
+    left:0;right:0;bottom:16px;
+    text-align:center;
+    font-size:12.5px;
+    color:var(--text-dimmer);
+    letter-spacing:.01em;
+  }
+  .caption-track span{
+    opacity:0;
+    animation:captionLoop 7s ease infinite;
+  }
+  .caption-track span:nth-child(1){animation-delay:0s;}
+  .caption-track span:nth-child(2){animation-delay:0s;}
+  .caption-track span{position:absolute;left:0;right:0;}
+  .c1{animation-name:cap1 !important;}
+  .c2{animation-name:cap2 !important;}
+  @keyframes cap1{
+    0%,16%{opacity:0;} 20%,58%{opacity:1;} 64%,100%{opacity:0;}
+  }
+  @keyframes cap2{
+    0%,66%{opacity:0;} 76%,96%{opacity:1;} 100%{opacity:0;}
+  }
+
+  /* ---------- section shell ---------- */
+  section{padding:100px 0;}
+  .section-head{
+    text-align:center;
+    max-width:600px;
+    margin:0 auto 56px;
+  }
+  .kicker{
+    font-size:12.5px;
+    font-weight:700;
+    letter-spacing:.14em;
+    text-transform:uppercase;
+    color:var(--accent);
+  }
+  h2{
+    margin:12px 0 0;
+    font-size:clamp(26px,4vw,38px);
+    letter-spacing:-.02em;
+    font-weight:800;
+  }
+  .section-head p{
+    margin:14px 0 0;
+    color:var(--text-dim);
+    font-size:15.5px;
+    line-height:1.7;
+  }
+
+  .reveal{
+    opacity:0;
+    transform:translateY(28px);
+    transition:opacity .7s cubic-bezier(.2,.7,.2,1), transform .7s cubic-bezier(.2,.7,.2,1);
+  }
+  .reveal.in{opacity:1;transform:translateY(0);}
+
+  /* ---------- features ---------- */
+  .grid{
+    display:grid;
+    grid-template-columns:repeat(3,1fr);
+    gap:18px;
+  }
+  @media (max-width:860px){ .grid{grid-template-columns:repeat(2,1fr);} }
+  @media (max-width:560px){ .grid{grid-template-columns:1fr;} }
+
+  .card{
+    position:relative;
+    padding:26px 22px;
+    border-radius:18px;
+    background:linear-gradient(180deg, var(--surface), var(--surface-2));
+    border:1px solid var(--border);
+    overflow:hidden;
+    transition:transform .35s cubic-bezier(.2,.8,.2,1), border-color .35s ease, box-shadow .35s ease;
+    transform-style:preserve-3d;
+    will-change:transform;
+  }
+  @media (hover:hover){
+    .card:hover{
+      border-color:var(--border-strong);
+      box-shadow:0 24px 50px -24px rgba(0,0,0,.6);
+    }
+  }
+  .card::before{
+    content:"";
+    position:absolute;inset:0;
+    background:radial-gradient(320px circle at var(--mx,50%) var(--my,0%), rgba(124,140,255,.14), transparent 60%);
+    opacity:0;
+    transition:opacity .35s ease;
+    pointer-events:none;
+  }
+  .card:hover::before{opacity:1;}
+  .card-icon{
+    width:42px;height:42px;
+    border-radius:11px;
+    display:flex;align-items:center;justify-content:center;
+    background:linear-gradient(135deg, rgba(124,140,255,.18), rgba(196,107,255,.14));
+    border:1px solid var(--border-strong);
+    margin-bottom:16px;
+  }
+  .card-icon svg{width:20px;height:20px;stroke:var(--text);}
+  .card h3{margin:0 0 8px;font-size:16px;font-weight:700;letter-spacing:-.01em;}
+  .card p{margin:0;font-size:13.5px;line-height:1.65;color:var(--text-dim);}
+
+  /* ---------- how it works ---------- */
+  .steps{
+    display:grid;
+    grid-template-columns:repeat(3,1fr);
+    gap:0;
+    position:relative;
+  }
+  @media (max-width:760px){ .steps{grid-template-columns:1fr;gap:34px;} }
+  .steps::before{
+    content:"";
+    position:absolute;
+    top:23px;left:calc(100%/6);right:calc(100%/6);
+    height:1px;
+    background:linear-gradient(90deg, transparent, var(--border-strong), var(--border-strong), transparent);
+  }
+  @media (max-width:760px){ .steps::before{display:none;} }
+  .step{
+    position:relative;
+    text-align:center;
+    padding:0 18px;
+  }
+  .step-num{
+    width:46px;height:46px;
+    margin:0 auto 20px;
+    border-radius:50%;
+    display:flex;align-items:center;justify-content:center;
+    font-weight:700;
+    font-size:16px;
+    background:var(--surface-2);
+    border:1px solid var(--border-strong);
+    position:relative;
+    z-index:2;
+  }
+  .step h3{margin:0 0 8px;font-size:15.5px;font-weight:700;}
+  .step p{margin:0;font-size:13.5px;color:var(--text-dim);line-height:1.65;}
+
+  /* ---------- open source callout ---------- */
+  .oss{
+    border-radius:26px;
+    padding:56px 40px;
+    text-align:center;
+    background:
+      radial-gradient(circle at 15% 20%, rgba(124,140,255,.16), transparent 45%),
+      radial-gradient(circle at 85% 80%, rgba(196,107,255,.14), transparent 45%),
+      var(--surface);
+    border:1px solid var(--border);
+    position:relative;
+    overflow:hidden;
+  }
+  .oss h2{margin-bottom:12px;}
+  .oss p{max-width:480px;margin:0 auto 28px;color:var(--text-dim);font-size:15px;line-height:1.7;}
+  .stars{
+    display:inline-flex;gap:4px;margin-bottom:18px;
+  }
+  .stars svg{width:16px;height:16px;fill:var(--accent-3);animation:twinkle 2.4s ease-in-out infinite;}
+  .stars svg:nth-child(2){animation-delay:.2s;}
+  .stars svg:nth-child(3){animation-delay:.4s;}
+  .stars svg:nth-child(4){animation-delay:.6s;}
+  .stars svg:nth-child(5){animation-delay:.8s;}
+  @keyframes twinkle{
+    0%,100%{opacity:.4;transform:scale(.9);}
+    50%{opacity:1;transform:scale(1.08);}
+  }
+
+  footer{
+    padding:44px 0 60px;
+    text-align:center;
+    color:var(--text-dimmer);
+    font-size:13px;
+  }
+  footer a{color:var(--text-dim);transition:color .2s ease;}
+  footer a:hover{color:var(--text);}
+</style>
+</head>
+<body>
+
+<div class="bg-blobs">
+  <div class="blob blob-1"></div>
+  <div class="blob blob-2"></div>
+  <div class="blob blob-3"></div>
+</div>
+<div class="cursor-glow" id="cursorGlow"></div>
+
+<nav id="nav">
+  <div class="wrap nav-inner">
+    <div class="brand">
+      <span class="brand-mark">
+        <svg viewBox="0 0 24 24" fill="none"><rect x="2" y="4" width="20" height="14" rx="2.5" stroke="white" stroke-width="1.8"/><rect x="12.5" y="10.5" width="7.5" height="5.5" rx="1.2" fill="white"/></svg>
+      </span>
+      AnyPiP
+    </div>
+    <div class="nav-links">
+      <a href="#features">功能</a>
+      <a href="#how">原理</a>
+      <a href="#opensource">开源</a>
+      <a class="nav-cta" href="https://github.com/Lyle-xub/AnyPiP" target="_blank" rel="noopener">
+        <svg viewBox="0 0 16 16" fill="currentColor"><path d="M8 0C3.58 0 0 3.58 0 8c0 3.54 2.29 6.53 5.47 7.59.4.07.55-.17.55-.38 0-.19-.01-.82-.01-1.49-2.01.37-2.53-.49-2.69-.94-.09-.23-.48-.94-.82-1.13-.28-.15-.68-.52-.01-.53.63-.01 1.08.58 1.23.82.72 1.21 1.87.87 2.33.66.07-.52.28-.87.51-1.07-1.78-.2-3.64-.89-3.64-3.95 0-.87.31-1.59.82-2.15-.08-.2-.36-1.02.08-2.12 0 0 .67-.21 2.2.82.64-.18 1.32-.27 2-.27.68 0 1.36.09 2 .27 1.53-1.04 2.2-.82 2.2-.82.44 1.1.16 1.92.08 2.12.51.56.82 1.27.82 2.15 0 3.07-1.87 3.75-3.65 3.95.29.25.54.73.54 1.48 0 1.07-.01 1.93-.01 2.2 0 .21.15.46.55.38A8.01 8.01 0 0 0 16 8c0-4.42-3.58-8-8-8z"/></svg>
+        GitHub
+      </a>
+    </div>
+  </div>
+</nav>
+
+<header class="hero">
+  <div class="wrap">
+    <span class="eyebrow"><span class="dot"></span> 开源 · 免费 · 原生 macOS</span>
+    <h1 class="headline">把任何窗口，<br>拖成一个<span class="grad">画中画</span></h1>
+    <p class="subhead">AnyPiP 是一个轻量的 macOS 菜单栏应用。把窗口甩到屏幕角落，它就变成一个可以移动、缩放、直接交互的悬浮小窗——不用切换应用，也不打断你正在做的事。</p>
+    <div class="hero-ctas">
+      <a class="btn btn-primary" href="https://github.com/Lyle-xub/AnyPiP" target="_blank" rel="noopener">
+        <svg viewBox="0 0 16 16" fill="currentColor"><path d="M8 0C3.58 0 0 3.58 0 8c0 3.54 2.29 6.53 5.47 7.59.4.07.55-.17.55-.38 0-.19-.01-.82-.01-1.49-2.01.37-2.53-.49-2.69-.94-.09-.23-.48-.94-.82-1.13-.28-.15-.68-.52-.01-.53.63-.01 1.08.58 1.23.82.72 1.21 1.87.87 2.33.66.07-.52.28-.87.51-1.07-1.78-.2-3.64-.89-3.64-3.95 0-.87.31-1.59.82-2.15-.08-.2-.36-1.02.08-2.12 0 0 .67-.21 2.2.82.64-.18 1.32-.27 2-.27.68 0 1.36.09 2 .27 1.53-1.04 2.2-.82 2.2-.82.44 1.1.16 1.92.08 2.12.51.56.82 1.27.82 2.15 0 3.07-1.87 3.75-3.65 3.95.29.25.54.73.54 1.48 0 1.07-.01 1.93-.01 2.2 0 .21.15.46.55.38A8.01 8.01 0 0 0 16 8c0-4.42-3.58-8-8-8z"/></svg>
+        查看源码
+      </a>
+      <a class="btn btn-ghost" href="https://github.com/Lyle-xub/AnyPiP/releases" target="_blank" rel="noopener">
+        下载最新版本
+      </a>
+    </div>
+
+    <div class="demo-stage" aria-hidden="true">
+      <div class="menubar">
+        <span class="traffic"></span><span class="traffic"></span><span class="traffic"></span>
+        <span class="pip-icon"></span>
+      </div>
+      <div class="source-window">
+        <div class="titlebar"><span></span><span></span><span></span></div>
+        <div class="body">
+          <div class="line w1"></div>
+          <div class="line w2"></div>
+          <div class="line w3"></div>
+        </div>
+      </div>
+      <div class="cursor-dot"></div>
+      <div class="pip-panel">
+        <div class="pip-body">
+          <div class="line" style="width:60%"></div>
+          <div class="line" style="width:85%"></div>
+          <div class="line" style="width:45%"></div>
+        </div>
+        <div class="glow"></div>
+        <div class="resize-handle"></div>
+      </div>
+      <div class="caption-track">
+        <span class="c1">把窗口甩向角落，自动变成悬浮画中画</span>
+        <span class="c2">拖动边缘缩放，内部软件实时跟随</span>
+      </div>
+    </div>
+  </div>
+</header>
+
+<section id="features">
+  <div class="wrap">
+    <div class="section-head reveal">
+      <span class="kicker">Features</span>
+      <h2>该有的都有，不该有的一个没有</h2>
+      <p>专注做好一件事：让任意窗口变成一个真正可用、可交互的悬浮小窗。</p>
+    </div>
+    <div class="grid">
+
+      <div class="card reveal">
+        <div class="card-icon"><svg viewBox="0 0 24 24" fill="none" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="18" height="13" rx="2"/><rect x="13" y="10" width="7" height="5" rx="1"/></svg></div>
+        <h3>一甩即成画中画</h3>
+        <p>把窗口拖到屏幕边缘松手，识别甩动手势，自动变成一个悬浮的小窗口，全程无需菜单操作。</p>
+      </div>
+
+      <div class="card reveal">
+        <div class="card-icon"><svg viewBox="0 0 24 24" fill="none" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M9 3H5a2 2 0 0 0-2 2v4"/><path d="M15 3h4a2 2 0 0 1 2 2v4"/><path d="M9 21H5a2 2 0 0 1-2-2v-4"/><path d="M15 21h4a2 2 0 0 0 2-2v-4"/></svg></div>
+        <h3>直接交互，不只是镜像</h3>
+        <p>鼠标悬停即可接管操控，点击、滚动、打字直接作用在源窗口上，感觉就像在用一个真实的小窗口。</p>
+      </div>
+
+      <div class="card reveal">
+        <div class="card-icon"><svg viewBox="0 0 24 24" fill="none" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M8 3H5a2 2 0 0 0-2 2v3m18-5v3a2 2 0 0 1-2 2h-3M3 16v3a2 2 0 0 0 2 2h3m11-5v3a2 2 0 0 1-2 2h-3"/></svg></div>
+        <h3>尺寸自适应</h3>
+        <p>拖拽画中画边缘调整大小时，内部软件会尽量跟着一起变化，而不是简单粗暴地裁切或拉伸画面。</p>
+      </div>
+
+      <div class="card reveal">
+        <div class="card-icon"><svg viewBox="0 0 24 24" fill="none" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 3"/></svg></div>
+        <h3>自动归还焦点</h3>
+        <p>操作完成后可以自动把键盘焦点还给你之前在用的应用，不打断正在进行的工作流。</p>
+      </div>
+
+      <div class="card reveal">
+        <div class="card-icon"><svg viewBox="0 0 24 24" fill="none" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3l1.9 4.4L18 9l-4.1 1.6L12 15l-1.9-4.4L6 9l4.1-1.6L12 3z"/><path d="M19 15l.9 2.1L22 18l-2.1.9L19 21l-.9-2.1L16 18l2.1-.9L19 15z"/></svg></div>
+        <h3>可自定义外观</h3>
+        <p>圆角大小、阴影开关、默认尺寸、堆叠角落——独立设置窗口里都能调，不是一套写死的样式。</p>
+      </div>
+
+      <div class="card reveal">
+        <div class="card-icon"><svg viewBox="0 0 24 24" fill="none" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M12 2l9 4.9V17L12 22l-9-5.1V6.9L12 2z"/><path d="M12 22V12M21 6.9 12 12 3 6.9"/></svg></div>
+        <h3>完全开源</h3>
+        <p>核心功能代码完全公开在 GitHub 上，欢迎阅读、提 issue、发 PR，一起把它做得更好用。</p>
+      </div>
+
+    </div>
+  </div>
+</section>
+
+<section id="how">
+  <div class="wrap">
+    <div class="section-head reveal">
+      <span class="kicker">How it works</span>
+      <h2>三步，把任何窗口变成画中画</h2>
+    </div>
+    <div class="steps">
+      <div class="step reveal">
+        <div class="step-num">1</div>
+        <h3>选中窗口</h3>
+        <p>从菜单栏点选，或直接把窗口拖向屏幕边缘触发甩动手势。</p>
+      </div>
+      <div class="step reveal">
+        <div class="step-num">2</div>
+        <h3>自动悬浮</h3>
+        <p>窗口以画中画形式悬浮显示，可跨 Space、覆盖全屏应用之上。</p>
+      </div>
+      <div class="step reveal">
+        <div class="step-num">3</div>
+        <h3>随手操作</h3>
+        <p>鼠标悬停即可交互，拖拽移动、边缘缩放，用完随手甩开即可关闭。</p>
+      </div>
+    </div>
+  </div>
+</section>
+
+<section id="opensource">
+  <div class="wrap">
+    <div class="oss reveal">
+      <div class="stars">
+        <svg viewBox="0 0 24 24"><path d="M12 2l2.9 6 6.6.9-4.8 4.6 1.1 6.5L12 17l-5.8 3 1.1-6.5L2.5 8.9l6.6-.9L12 2z"/></svg>
+        <svg viewBox="0 0 24 24"><path d="M12 2l2.9 6 6.6.9-4.8 4.6 1.1 6.5L12 17l-5.8 3 1.1-6.5L2.5 8.9l6.6-.9L12 2z"/></svg>
+        <svg viewBox="0 0 24 24"><path d="M12 2l2.9 6 6.6.9-4.8 4.6 1.1 6.5L12 17l-5.8 3 1.1-6.5L2.5 8.9l6.6-.9L12 2z"/></svg>
+        <svg viewBox="0 0 24 24"><path d="M12 2l2.9 6 6.6.9-4.8 4.6 1.1 6.5L12 17l-5.8 3 1.1-6.5L2.5 8.9l6.6-.9L12 2z"/></svg>
+        <svg viewBox="0 0 24 24"><path d="M12 2l2.9 6 6.6.9-4.8 4.6 1.1 6.5L12 17l-5.8 3 1.1-6.5L2.5 8.9l6.6-.9L12 2z"/></svg>
+      </div>
+      <h2>免费使用，代码开放</h2>
+      <p>AnyPiP 的核心功能完全免费、开源，代码托管在 GitHub 上。如果它对你有用，一个 star 就是最好的支持。</p>
+      <a class="btn btn-primary" href="https://github.com/Lyle-xub/AnyPiP" target="_blank" rel="noopener">
+        <svg viewBox="0 0 16 16" fill="currentColor"><path d="M8 0C3.58 0 0 3.58 0 8c0 3.54 2.29 6.53 5.47 7.59.4.07.55-.17.55-.38 0-.19-.01-.82-.01-1.49-2.01.37-2.53-.49-2.69-.94-.09-.23-.48-.94-.82-1.13-.28-.15-.68-.52-.01-.53.63-.01 1.08.58 1.23.82.72 1.21 1.87.87 2.33.66.07-.52.28-.87.51-1.07-1.78-.2-3.64-.89-3.64-3.95 0-.87.31-1.59.82-2.15-.08-.2-.36-1.02.08-2.12 0 0 .67-.21 2.2.82.64-.18 1.32-.27 2-.27.68 0 1.36.09 2 .27 1.53-1.04 2.2-.82 2.2-.82.44 1.1.16 1.92.08 2.12.51.56.82 1.27.82 2.15 0 3.07-1.87 3.75-3.65 3.95.29.25.54.73.54 1.48 0 1.07-.01 1.93-.01 2.2 0 .21.15.46.55.38A8.01 8.01 0 0 0 16 8c0-4.42-3.58-8-8-8z"/></svg>
+        前往 GitHub Star
+      </a>
+    </div>
+  </div>
+</section>
+
+<footer>
+  <div class="wrap">
+    <p>AnyPiP 是一个个人开源项目，与 Apple 官方无关。</p>
+    <p style="margin-top:6px;">
+      <a href="https://github.com/Lyle-xub/AnyPiP" target="_blank" rel="noopener">GitHub</a>
+      ·
+      <a href="https://github.com/Lyle-xub/AnyPiP/issues" target="_blank" rel="noopener">反馈问题</a>
+    </p>
+  </div>
+</footer>
+
+<script>
+  // nav background on scroll
+  const nav = document.getElementById('nav');
+  const onScroll = () => nav.classList.toggle('scrolled', window.scrollY > 8);
+  document.addEventListener('scroll', onScroll, { passive: true });
+  onScroll();
+
+  // cursor glow follow (desktop only, respects reduced motion)
+  const glow = document.getElementById('cursorGlow');
+  const prefersReduced = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+  const hasHover = window.matchMedia('(hover: hover)').matches;
+  if (prefersReduced || !hasHover) {
+    glow.style.display = 'none';
+  } else {
+    let raf = null, tx = 0, ty = 0, cx = 0, cy = 0;
+    document.addEventListener('mousemove', (e) => {
+      tx = e.clientX; ty = e.clientY;
+      if (!raf) raf = requestAnimationFrame(tick);
+    });
+    function tick(){
+      cx += (tx - cx) * 0.18;
+      cy += (ty - cy) * 0.18;
+      glow.style.transform = `translate(${cx}px, ${cy}px) translate(-50%,-50%)`;
+      if (Math.abs(tx - cx) > 0.5 || Math.abs(ty - cy) > 0.5) {
+        raf = requestAnimationFrame(tick);
+      } else {
+        raf = null;
+      }
+    }
+  }
+
+  // scroll reveal
+  const revealEls = document.querySelectorAll('.reveal');
+  const io = new IntersectionObserver((entries) => {
+    entries.forEach((entry, i) => {
+      if (entry.isIntersecting) {
+        entry.target.style.transitionDelay = (i % 6) * 60 + 'ms';
+        entry.target.classList.add('in');
+        io.unobserve(entry.target);
+      }
+    });
+  }, { threshold: 0.15, rootMargin: '0px 0px -40px 0px' });
+  revealEls.forEach(el => io.observe(el));
+
+  // card tilt + spotlight (desktop only)
+  if (hasHover && !prefersReduced) {
+    document.querySelectorAll('.card').forEach(card => {
+      card.addEventListener('mousemove', (e) => {
+        const r = card.getBoundingClientRect();
+        const px = (e.clientX - r.left) / r.width;
+        const py = (e.clientY - r.top) / r.height;
+        const rx = (py - 0.5) * -8;
+        const ry = (px - 0.5) * 8;
+        card.style.transform = `perspective(700px) rotateX(${rx}deg) rotateY(${ry}deg) translateY(-4px)`;
+        card.style.setProperty('--mx', (px * 100) + '%');
+        card.style.setProperty('--my', (py * 100) + '%');
+      });
+      card.addEventListener('mouseleave', () => {
+        card.style.transform = 'perspective(700px) rotateX(0) rotateY(0) translateY(0)';
+      });
+    });
+  }
+</script>
+
+</body>
+</html>
