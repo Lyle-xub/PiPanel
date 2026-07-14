@@ -11,18 +11,18 @@
 <link rel="apple-touch-icon" href="assets/icon-256.png">
 <style>
   :root{
-    --bg:#ffffff;
-    --bg-2:#f5f5f7;
-    --surface:#ffffff;
-    --surface-2:#f5f5f7;
-    --border:rgba(0,0,0,.07);
-    --border-strong:rgba(0,0,0,.12);
-    --text:#1d1d1f;
-    --text-dim:#6e6e73;
-    --text-dimmer:#86868b;
-    --accent:#0d70ff;
-    --accent-2:#5e5ce6;
-    --accent-3:#00b4a6;
+    --bg:#070707;
+    --bg-2:#0c0c0d;
+    --surface:#101011;
+    --surface-2:#151517;
+    --border:rgba(255,255,255,.08);
+    --border-strong:rgba(255,255,255,.16);
+    --text:#f5f5f7;
+    --text-dim:#a1a1a6;
+    --text-dimmer:#6e6e73;
+    --accent:#5b8cff;
+    --accent-2:#8b7cff;
+    --accent-3:#62d8c8;
     --accent-warm:#ff5800;
     --radius:20px;
   }
@@ -55,7 +55,7 @@
     position:absolute;
     border-radius:50%;
     filter:blur(110px);
-    opacity:.28;
+    opacity:.12;
     will-change:transform;
   }
   .blob-1{
@@ -93,7 +93,7 @@
     position:fixed;
     width:420px;height:420px;
     border-radius:50%;
-    background:radial-gradient(circle, rgba(0,113,227,.06), transparent 70%);
+    background:radial-gradient(circle, rgba(91,140,255,.08), transparent 70%);
     pointer-events:none;
     z-index:1;
     transform:translate(-50%,-50%);
@@ -114,12 +114,13 @@
     position:fixed;
     top:0;left:0;right:0;
     z-index:50;
-    padding:18px 0;
+    padding:12px 0;
+    background:rgba(7,7,7,.82);
     transition:background-color .35s ease, border-color .35s ease, backdrop-filter .35s ease;
     border-bottom:1px solid transparent;
   }
   nav.scrolled{
-    background-color:rgba(255,255,255,.78);
+    background-color:rgba(7,7,7,.88);
     backdrop-filter:blur(16px) saturate(160%);
     -webkit-backdrop-filter:blur(16px) saturate(160%);
     border-bottom-color:var(--border);
@@ -162,18 +163,21 @@
     font-weight:600;
     transition:border-color .2s ease, background-color .2s ease, transform .2s ease;
   }
-  .nav-cta:hover{background-color:rgba(0,0,0,.04);transform:translateY(-1px);}
+  .nav-cta:hover{background-color:rgba(255,255,255,.06);transform:translateY(-1px);}
   @media (max-width:720px){ .nav-links a:not(.nav-cta){display:none;} }
 
   /* ---------- hero ---------- */
   header.hero{
-    padding:150px 0 90px;
+    min-height:100vh;
+    padding:148px 0 86px;
     text-align:center;
   }
   .hero-icon{
     margin:0 auto;
+    width:96px;
+    height:96px;
     border-radius:22px;
-    box-shadow:0 16px 40px -14px rgba(0,0,0,.22);
+    box-shadow:0 24px 70px -20px rgba(91,140,255,.38);
     opacity:0;
     animation:rise .8s ease forwards;
   }
@@ -185,7 +189,7 @@
     padding:6px 14px;
     border-radius:999px;
     border:1px solid var(--border-strong);
-    background:rgba(0,113,227,.06);
+    background:rgba(255,255,255,.035);
     font-size:12.5px;
     color:var(--text-dim);
     opacity:0;
@@ -204,10 +208,10 @@
   }
   h1.headline{
     margin:26px auto 0;
-    max-width:780px;
-    font-size:clamp(34px,6vw,60px);
-    line-height:1.12;
-    letter-spacing:-.03em;
+    max-width:920px;
+    font-size:clamp(42px,7.2vw,78px);
+    line-height:1.04;
+    letter-spacing:-.055em;
     font-weight:800;
     opacity:0;
     animation:rise .9s ease .08s forwards;
@@ -226,8 +230,8 @@
   }
   p.subhead{
     margin:22px auto 0;
-    max-width:560px;
-    font-size:17px;
+    max-width:650px;
+    font-size:18px;
     line-height:1.65;
     color:var(--text-dim);
     opacity:0;
@@ -250,24 +254,24 @@
     display:inline-flex;
     align-items:center;
     gap:8px;
-    padding:13px 22px;
-    border-radius:12px;
+    padding:14px 24px;
+    border-radius:13px;
     font-size:14.5px;
     font-weight:600;
     transition:transform .25s cubic-bezier(.2,.8,.2,1), box-shadow .25s ease, background .25s ease;
   }
   .btn-primary{
-    background:var(--accent);
-    color:#fff;
-    box-shadow:0 10px 26px -8px rgba(13,112,255,.45);
+    background:#f5f5f7;
+    color:#090909;
+    box-shadow:0 16px 38px -18px rgba(255,255,255,.4);
   }
-  .btn-primary:hover{transform:translateY(-2px) scale(1.02);box-shadow:0 16px 32px -8px rgba(13,112,255,.55);background:#0a5fdb;}
+  .btn-primary:hover{transform:translateY(-2px) scale(1.02);box-shadow:0 20px 44px -18px rgba(255,255,255,.5);background:#fff;}
   .btn-ghost{
-    background:rgba(0,0,0,.03);
+    background:rgba(255,255,255,.04);
     border:1px solid var(--border-strong);
     color:var(--text);
   }
-  .btn-ghost:hover{background:rgba(0,0,0,.05);transform:translateY(-2px);}
+  .btn-ghost:hover{background:rgba(255,255,255,.08);transform:translateY(-2px);}
   .btn svg{width:16px;height:16px;}
   button.btn{border:none;font-family:inherit;cursor:pointer;}
   button.btn[aria-busy="true"]{opacity:.75;cursor:progress;}
@@ -276,37 +280,37 @@
   .demo-stage{
     position:relative;
     margin:72px auto 0;
-    max-width:860px;
-    height:420px;
-    border-radius:24px;
+    max-width:960px;
+    height:460px;
+    border-radius:28px;
     border:1px solid var(--border);
     background:
-      radial-gradient(circle at 20% 15%, rgba(0,113,227,.07), transparent 45%),
-      radial-gradient(circle at 85% 80%, rgba(94,92,230,.07), transparent 45%),
-      linear-gradient(180deg, var(--surface), var(--bg-2));
+      radial-gradient(circle at 20% 15%, rgba(91,140,255,.11), transparent 42%),
+      radial-gradient(circle at 85% 80%, rgba(139,124,255,.09), transparent 42%),
+      linear-gradient(180deg, #111113, #09090a);
     overflow:hidden;
     opacity:0;
     animation:rise 1s ease .34s forwards;
-    box-shadow:0 40px 80px -32px rgba(0,0,0,.16);
+    box-shadow:0 45px 110px -42px rgba(0,0,0,.9), inset 0 1px rgba(255,255,255,.03);
   }
   .demo-stage::before{
     content:"";
     position:absolute;inset:0;
     background-image:
-      linear-gradient(to right, rgba(0,0,0,.035) 1px, transparent 1px),
-      linear-gradient(to bottom, rgba(0,0,0,.035) 1px, transparent 1px);
+      linear-gradient(to right, rgba(255,255,255,.025) 1px, transparent 1px),
+      linear-gradient(to bottom, rgba(255,255,255,.025) 1px, transparent 1px);
     background-size:36px 36px;
     mask-image:radial-gradient(circle at 50% 40%, black, transparent 75%);
   }
   .menubar{
     position:absolute;top:0;left:0;right:0;height:34px;
-    background:rgba(0,0,0,.02);
+    background:rgba(255,255,255,.025);
     border-bottom:1px solid var(--border);
     display:flex;align-items:center;
     padding:0 16px;
     gap:8px;
   }
-  .menubar .traffic{width:8px;height:8px;border-radius:50%;background:rgba(0,0,0,.14);}
+  .menubar .traffic{width:8px;height:8px;border-radius:50%;background:rgba(255,255,255,.18);}
   .menubar .pip-icon{
     margin-left:auto;
     width:16px;height:16px;
@@ -319,9 +323,9 @@
     top:78px;left:64px;
     width:300px;height:200px;
     border-radius:12px;
-    background:#ffffff;
+    background:#1a1a1d;
     border:1px solid var(--border-strong);
-    box-shadow:0 20px 45px -22px rgba(0,0,0,.22);
+    box-shadow:0 24px 55px -22px rgba(0,0,0,.8);
     animation:sourceLoop 7s cubic-bezier(.65,0,.35,1) infinite;
   }
   .source-window .titlebar{
@@ -330,9 +334,9 @@
     padding:0 12px;
     border-bottom:1px solid var(--border);
   }
-  .source-window .titlebar span{width:7px;height:7px;border-radius:50%;background:rgba(0,0,0,.15);}
+  .source-window .titlebar span{width:7px;height:7px;border-radius:50%;background:rgba(255,255,255,.22);}
   .source-window .body{padding:14px;display:flex;flex-direction:column;gap:8px;}
-  .source-window .line{height:8px;border-radius:5px;background:rgba(0,0,0,.07);}
+  .source-window .line{height:8px;border-radius:5px;background:rgba(255,255,255,.08);}
   .source-window .line.w1{width:70%;}
   .source-window .line.w2{width:90%;}
   .source-window .line.w3{width:55%;}
@@ -349,9 +353,9 @@
     right:36px;bottom:30px;
     width:190px;height:126px;
     border-radius:14px;
-    background:#ffffff;
-    border:1px solid rgba(0,0,0,.08);
-    box-shadow:0 25px 55px -20px rgba(0,113,227,.30), 0 0 0 1px rgba(0,0,0,.02);
+    background:#202024;
+    border:1px solid rgba(255,255,255,.14);
+    box-shadow:0 28px 65px -20px rgba(91,140,255,.34), 0 0 0 1px rgba(255,255,255,.02);
     overflow:hidden;
     animation:pipLoop 7s cubic-bezier(.65,0,.35,1) infinite;
   }
@@ -360,7 +364,7 @@
     padding:12px;
     display:flex;flex-direction:column;gap:7px;
   }
-  .pip-panel .line{height:6px;border-radius:4px;background:rgba(0,0,0,.09);}
+  .pip-panel .line{height:6px;border-radius:4px;background:rgba(255,255,255,.12);}
   .pip-panel .glow{
     position:absolute;inset:0;
     background:linear-gradient(135deg, rgba(0,113,227,.12), rgba(94,92,230,.08));
@@ -370,8 +374,8 @@
   .pip-panel .resize-handle{
     position:absolute;right:6px;bottom:6px;
     width:10px;height:10px;
-    border-right:2px solid rgba(0,0,0,.25);
-    border-bottom:2px solid rgba(0,0,0,.25);
+    border-right:2px solid rgba(255,255,255,.32);
+    border-bottom:2px solid rgba(255,255,255,.32);
     border-radius:0 0 3px 0;
   }
   @keyframes pipLoop{
@@ -390,8 +394,8 @@
     position:absolute;
     width:14px;height:14px;
     border-radius:50%;
-    background:var(--text);
-    box-shadow:0 0 0 4px rgba(255,255,255,.9), 0 4px 14px rgba(0,0,0,.22);
+    background:#fff;
+    box-shadow:0 0 0 4px rgba(0,0,0,.75), 0 4px 14px rgba(0,0,0,.5);
     animation:cursorLoop 7s cubic-bezier(.65,0,.35,1) infinite;
   }
   @keyframes cursorLoop{
@@ -426,9 +430,16 @@
   @keyframes cap2{
     0%,66%{opacity:0;} 76%,96%{opacity:1;} 100%{opacity:0;}
   }
+  @media (max-width:620px){
+    header.hero{padding-top:118px;}
+    .demo-stage{height:340px;margin-top:52px;border-radius:20px;}
+    .source-window{top:64px;left:20px;width:240px;height:160px;}
+    .pip-panel{right:18px;bottom:42px;width:158px;height:105px;}
+    .caption-track{bottom:14px;font-size:11px;}
+  }
 
   /* ---------- section shell ---------- */
-  section{padding:100px 0;}
+  section{padding:112px 0;border-top:1px solid rgba(255,255,255,.045);}
   .section-head{
     text-align:center;
     max-width:600px;
@@ -465,27 +476,35 @@
   /* ---------- features ---------- */
   .grid{
     display:grid;
-    grid-template-columns:repeat(3,1fr);
-    gap:18px;
+    grid-template-columns:repeat(2,1fr);
+    gap:0;
+    border:1px solid var(--border);
+    border-radius:24px;
+    overflow:hidden;
+    background:var(--surface);
   }
   @media (max-width:860px){ .grid{grid-template-columns:repeat(2,1fr);} }
   @media (max-width:560px){ .grid{grid-template-columns:1fr;} }
 
   .card{
     position:relative;
-    padding:26px 22px;
-    border-radius:18px;
-    background:linear-gradient(180deg, var(--surface), var(--surface-2));
-    border:1px solid var(--border);
+    min-height:225px;
+    padding:36px 34px;
+    border-radius:0;
+    background:transparent;
+    border:0;
+    border-bottom:1px solid var(--border);
     overflow:hidden;
     transition:transform .35s cubic-bezier(.2,.8,.2,1), border-color .35s ease, box-shadow .35s ease;
     transform-style:preserve-3d;
     will-change:transform;
   }
+  .card:nth-child(odd){border-right:1px solid var(--border);}
+  .card:nth-last-child(-n+2){border-bottom:0;}
   @media (hover:hover){
     .card:hover{
       border-color:var(--border-strong);
-      box-shadow:0 24px 50px -28px rgba(0,0,0,.18);
+      box-shadow:inset 0 0 70px rgba(255,255,255,.025);
     }
   }
   .card::before{
@@ -501,7 +520,7 @@
     width:58px;height:58px;
     border-radius:16px;
     display:flex;align-items:center;justify-content:center;
-    background:var(--bg-2);
+    background:rgba(255,255,255,.055);
     margin-bottom:18px;
     transition:transform .35s cubic-bezier(.2,.8,.2,1), background .35s ease;
   }
@@ -512,6 +531,10 @@
   .card-icon.warm svg{stroke:var(--accent-warm);}
   .card h3{margin:0 0 8px;font-size:16px;font-weight:700;letter-spacing:-.01em;}
   .card p{margin:0;font-size:13.5px;line-height:1.65;color:var(--text-dim);}
+  @media (max-width:560px){
+    .card{min-height:0;border-right:0 !important;border-bottom:1px solid var(--border) !important;}
+    .card:last-child{border-bottom:0 !important;}
+  }
 
   /* ---------- how it works ---------- */
   .steps{
@@ -640,21 +663,6 @@
     50%{opacity:1;transform:scale(1.08);}
   }
 
-  /* ---------- requirements ---------- */
-  .req-grid{
-    display:grid;grid-template-columns:repeat(3,1fr);gap:18px;
-    max-width:900px;margin:0 auto;
-  }
-  @media (max-width:760px){ .req-grid{grid-template-columns:1fr;} }
-  .req-item{
-    display:flex;align-items:flex-start;gap:14px;
-    padding:22px;border-radius:16px;
-    background:var(--surface-2);border:1px solid var(--border);
-  }
-  .req-item svg{flex:0 0 auto;width:22px;height:22px;stroke:var(--accent);margin-top:2px;}
-  .req-item h3{margin:0 0 4px;font-size:14px;font-weight:700;}
-  .req-item p{margin:0;font-size:12.5px;color:var(--text-dim);line-height:1.6;}
-
   /* ---------- pricing ---------- */
   .pricing-grid{
     display:grid;
@@ -735,12 +743,13 @@
     <h1 class="headline">把正在运行的<span class="grad">真实窗口</span>，<br>变成可交互画中画</h1>
     <p class="subhead">PiPanel 是目前唯一能把正在运行的真实 macOS 窗口变成可交互画中画的应用。它不是截图，也不只是画面镜像——点击、滚动、打字都会实时作用于原窗口，让你不用切换应用也能继续操作。</p>
     <div class="hero-ctas">
-      <a class="btn btn-primary" href="https://github.com/Lyle-xub/PiPanel" target="_blank" rel="noopener">
+      <a class="btn btn-primary" href="https://github.com/Lyle-xub/PiPanel/releases" target="_blank" rel="noopener">
+        <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M8 2v8"/><path d="m4.8 7 3.2 3.2L11.2 7"/><path d="M2.5 13.5h11"/></svg>
+        免费下载
+      </a>
+      <a class="btn btn-ghost" href="https://github.com/Lyle-xub/PiPanel" target="_blank" rel="noopener">
         <svg viewBox="0 0 16 16" fill="currentColor"><path d="M8 0C3.58 0 0 3.58 0 8c0 3.54 2.29 6.53 5.47 7.59.4.07.55-.17.55-.38 0-.19-.01-.82-.01-1.49-2.01.37-2.53-.49-2.69-.94-.09-.23-.48-.94-.82-1.13-.28-.15-.68-.52-.01-.53.63-.01 1.08.58 1.23.82.72 1.21 1.87.87 2.33.66.07-.52.28-.87.51-1.07-1.78-.2-3.64-.89-3.64-3.95 0-.87.31-1.59.82-2.15-.08-.2-.36-1.02.08-2.12 0 0 .67-.21 2.2.82.64-.18 1.32-.27 2-.27.68 0 1.36.09 2 .27 1.53-1.04 2.2-.82 2.2-.82.44 1.1.16 1.92.08 2.12.51.56.82 1.27.82 2.15 0 3.07-1.87 3.75-3.65 3.95.29.25.54.73.54 1.48 0 1.07-.01 1.93-.01 2.2 0 .21.15.46.55.38A8.01 8.01 0 0 0 16 8c0-4.42-3.58-8-8-8z"/></svg>
         查看源码
-      </a>
-      <a class="btn btn-ghost" href="https://github.com/Lyle-xub/PiPanel/releases" target="_blank" rel="noopener">
-        下载最新版本
       </a>
     </div>
 
@@ -845,38 +854,6 @@
         <div class="step-num">3</div>
         <h3>随手操作</h3>
         <p>鼠标悬停即可交互，拖拽移动、边缘缩放，用完随手甩开即可关闭。</p>
-      </div>
-    </div>
-  </div>
-</section>
-
-<section id="requirements">
-  <div class="wrap">
-    <div class="section-head reveal">
-      <span class="kicker">Requirements</span>
-      <h2>运行环境</h2>
-    </div>
-    <div class="req-grid">
-      <div class="req-item reveal">
-        <svg viewBox="0 0 24 24" fill="none" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="18" height="14" rx="2"/><path d="M8 21h8M12 18v3"/></svg>
-        <div>
-          <h3>macOS 14.0 及以上</h3>
-          <p>需要 macOS Sonoma 或更新版本。</p>
-        </div>
-      </div>
-      <div class="req-item reveal">
-        <svg viewBox="0 0 24 24" fill="none" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="4" y="4" width="16" height="16" rx="3"/><path d="M9 2v2M15 2v2M9 20v2M15 20v2M2 9h2M2 15h2M20 9h2M20 15h2"/></svg>
-        <div>
-          <h3>仅支持 Apple Silicon</h3>
-          <p>需要 M 系列芯片的 Mac，暂不支持 Intel 机型。</p>
-        </div>
-      </div>
-      <div class="req-item reveal">
-        <svg viewBox="0 0 24 24" fill="none" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M9 12l2 2 4-4"/><rect x="3" y="4" width="18" height="16" rx="2"/></svg>
-        <div>
-          <h3>两项系统权限</h3>
-          <p>「屏幕录制」和「辅助功能」，首次使用时引导开启，仅本机生效。</p>
-        </div>
       </div>
     </div>
   </div>

@@ -1,14 +1,14 @@
 :root{
-  --bg:#ffffff;
-  --bg-2:#f5f5f7;
-  --surface:#ffffff;
-  --border:rgba(0,0,0,.07);
-  --border-strong:rgba(0,0,0,.12);
-  --text:#1d1d1f;
-  --text-dim:#6e6e73;
-  --text-dimmer:#86868b;
-  --accent:#0d70ff;
-  --accent-2:#5e5ce6;
+  --bg:#070707;
+  --bg-2:#0c0c0d;
+  --surface:#101011;
+  --border:rgba(255,255,255,.08);
+  --border-strong:rgba(255,255,255,.16);
+  --text:#f5f5f7;
+  --text-dim:#a1a1a6;
+  --text-dimmer:#6e6e73;
+  --accent:#5b8cff;
+  --accent-2:#62d8c8;
 }
 *{box-sizing:border-box;}
 html{scroll-behavior:smooth;}
@@ -33,12 +33,13 @@ nav{
   position:fixed;
   top:0;left:0;right:0;
   z-index:50;
-  padding:18px 0;
+  padding:12px 0;
+  background:rgba(7,7,7,.82);
   transition:background-color .35s ease, border-color .35s ease, backdrop-filter .35s ease;
   border-bottom:1px solid transparent;
 }
 nav.scrolled{
-  background-color:rgba(255,255,255,.78);
+  background-color:rgba(7,7,7,.88);
   backdrop-filter:blur(16px) saturate(160%);
   -webkit-backdrop-filter:blur(16px) saturate(160%);
   border-bottom-color:var(--border);
@@ -56,7 +57,7 @@ nav.scrolled{
   font-size:13px;font-weight:600;
   transition:border-color .2s ease, background-color .2s ease, transform .2s ease;
 }
-.nav-cta:hover{background-color:rgba(0,0,0,.04);transform:translateY(-1px);}
+.nav-cta:hover{background-color:rgba(255,255,255,.06);transform:translateY(-1px);}
 @media (max-width:640px){ .nav-links a:not(.nav-cta){display:none;} }
 
 /* ---------- legal content ---------- */
