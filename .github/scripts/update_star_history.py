@@ -116,8 +116,8 @@ def build_svg(
         return str(value)
 
     y_ticks: list[str] = []
-    for index in range(5):
-        value = round(y_max * index / 4)
+    for index in range(6):
+        value = round(y_max * index / 5)
         y_pos = y(value)
         label_text = "" if value == 0 else format_stars(value)
         y_ticks.append(
