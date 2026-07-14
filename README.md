@@ -23,15 +23,6 @@
 
 鼠标与键盘操作会经过坐标转换和辅助功能接口转发回源窗口，所以画中画不只是预览，而是一个真正可以继续使用的窗口入口。
 
-```mermaid
-flowchart LR
-    A["正在运行的源窗口"] --> B["私有虚拟显示器"]
-    B --> C["ScreenCaptureKit 实时捕获"]
-    C --> D["置顶画中画面板"]
-    D -->|"点击、滚动、键盘输入"| E["交互与坐标转换"]
-    E --> A
-```
-
 ## 开源版功能
 
 - 将任意普通应用窗口变成实时画中画
@@ -51,11 +42,8 @@ flowchart LR
 
 - macOS 14 Sonoma 或更高版本
 - Apple Silicon Mac（M 系列芯片）
-- Xcode 15 或更高版本（从源码构建）
 - 屏幕录制权限
 - 辅助功能权限
-
-> PiPanel 使用非公开的 `CGVirtualDisplay` API 创建虚拟显示器，因此不适合通过 Mac App Store 分发。系统升级也可能影响相关行为。
 
 ## 安装
 
@@ -68,27 +56,6 @@ flowchart LR
 1. **屏幕录制**：捕获选中窗口的实时画面。
 2. **辅助功能**：移动和调整源窗口，并转发鼠标与键盘操作。
 
-### 从源码构建
-
-```bash
-git clone https://github.com/Lyle-xub/PiPanel.git
-cd PiPanel
-open PiPanel.xcodeproj
-```
-
-在 Xcode 中：
-
-1. 选择 `PiPanel` target。
-2. 在 Signing & Capabilities 中选择自己的开发团队。
-3. 选择 **My Mac**，然后运行。
-
-仓库也保留了 XcodeGen 配置。如需重新生成工程：
-
-```bash
-brew install xcodegen
-xcodegen generate
-```
-
 ## 使用方法
 
 1. 启动 PiPanel，并授予屏幕录制和辅助功能权限。
@@ -96,28 +63,6 @@ xcodegen generate
 3. 移动画中画、拖动边缘调整大小，或直接在其中点击和输入。
 4. 也可以把真实窗口快速甩向屏幕边缘，直接创建画中画。
 5. 在菜单栏的活跃会话列表中关闭单个或全部画中画。
-
-## 项目结构
-
-```text
-PiPanel/
-├── App/             App 生命周期与配置
-├── Capture/         虚拟显示器、窗口枚举与 ScreenCaptureKit
-├── Interaction/     坐标转换、鼠标和键盘事件转发
-├── MenuBar/         菜单栏窗口选择与会话管理
-├── PiPPanel/        悬浮面板、渲染、缩放和关闭交互
-├── Permissions/     屏幕录制与辅助功能权限
-├── Settings/        通用、外观与开机启动设置
-└── Welcome/         首次启动引导
-```
-
-关键实现入口：
-
-- `Capture/CaptureSession.swift`：管理源窗口、虚拟显示器和实时捕获。
-- `Capture/VirtualDisplayHost.swift`：创建与销毁私有虚拟显示器。
-- `Interaction/InteractionForwarder.swift`：把画中画交互转发至源窗口。
-- `PiPPanel/PiPSessionManager.swift`：管理画中画会话生命周期。
-- `PiPPanel/PiPVideoLayerView.swift`：显示捕获画面并处理移动、缩放等手势。
 
 ## 开源版与官方发行版
 
@@ -130,7 +75,6 @@ PiPanel/
 - DRM 或受系统保护的窗口可能无法捕获。
 - 某些系统窗口、弹出层和非标准窗口不一定会出现在窗口列表中。
 - 应用退出、窗口关闭或源窗口结构发生重大变化时，对应画中画会自动结束。
-- 虚拟显示器依赖 macOS 非公开接口，未来系统版本可能需要适配。
 
 ## 贡献
 
