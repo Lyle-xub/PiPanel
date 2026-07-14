@@ -78,7 +78,7 @@
 
 如果 PiPanel 对你有帮助，欢迎点一个 Star。你的支持会帮助更多人发现这个项目。
 
-[![PiPanel Star History](https://api.star-history.com/svg?repos=Lyle-xub/PiPanel&type=Date)](https://www.star-history.com/#Lyle-xub/PiPanel&Date)
+[![PiPanel Star History](docs/assets/star-history.svg)](https://github.com/Lyle-xub/PiPanel/stargazers)
 
 ## 许可证
 
