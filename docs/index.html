@@ -315,7 +315,11 @@
   .feature-card p{margin:13px 0 0;max-width:440px;font-size:14px;line-height:1.7;color:rgba(23,23,27,.67)}
   .feature-card.blue{background:#cad8ff}.feature-card.yellow{background:var(--yellow)}
   .feature-card.pink{background:#f8cbd9}.feature-card.mint{background:var(--mint)}
+  .feature-card.peach{background:var(--peach)}.feature-card.lavender{background:#e3d9fb}
   .feature-card.wide{grid-column:1/-1;min-height:340px}
+  .specials-label{margin-top:64px}
+  .specials-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:20px;margin-top:24px}
+  .specials-grid .feature-card{min-height:260px}
   .card-art{position:absolute;right:25px;bottom:22px;width:45%;height:55%}
   .window-stack span{position:absolute;display:block;width:78%;height:70%;border-radius:18px;border:2px solid rgba(23,23,27,.52);background:rgba(255,255,255,.45);box-shadow:7px 9px 0 rgba(23,23,27,.12)}
   .window-stack span:nth-child(2){transform:translate(28px,-26px);background:white}
@@ -423,7 +427,7 @@
   @media(max-width:900px){
     .hero{min-height:900px}.hero h1{font-size:clamp(50px,11vw,80px)}
     .product-stage{height:410px}.app-window{grid-template-columns:180px 1fr}.canvas{padding:42px 28px}.floating-pip{width:180px;height:114px}
-    .feature-grid,.faq-layout{grid-template-columns:1fr}.feature-card.wide{grid-column:auto}.wide-layout{grid-template-columns:1fr}.workflow-art{display:none}
+    .feature-grid,.faq-layout,.specials-grid{grid-template-columns:1fr}.feature-card.wide{grid-column:auto}.wide-layout{grid-template-columns:1fr}.workflow-art{display:none}
     .steps,.price-grid{grid-template-columns:1fr}.pricing-head{display:block}.pricing-head p{margin-top:18px}.faq-sticky{position:static}
   }
   @media(max-width:680px){
@@ -514,12 +518,16 @@
     <span class="quote-chip"><b>04</b> 多窗口智能堆叠</span>
     <span class="quote-chip"><b>05</b> 原生 macOS 体验</span>
     <span class="quote-chip"><b>06</b> 本地处理，保护隐私</span>
+    <span class="quote-chip"><b>07</b> 悬浮播放控制</span>
+    <span class="quote-chip"><b>08</b> 实时同步歌词</span>
     <span class="quote-chip"><b>01</b> 真实窗口持续运行</span>
     <span class="quote-chip"><b>02</b> 点击、滚动与输入</span>
     <span class="quote-chip"><b>03</b> 一甩即成画中画</span>
     <span class="quote-chip"><b>04</b> 多窗口智能堆叠</span>
     <span class="quote-chip"><b>05</b> 原生 macOS 体验</span>
     <span class="quote-chip"><b>06</b> 本地处理，保护隐私</span>
+    <span class="quote-chip"><b>07</b> 悬浮播放控制</span>
+    <span class="quote-chip"><b>08</b> 实时同步歌词</span>
   </div>
 </div>
 
@@ -572,6 +580,22 @@
             <div class="workflow-core"></div>
           </div>
         </div>
+      </article>
+    </div>
+
+    <span class="section-label specials-label reveal">听歌追剧，也能悬浮操作</span>
+    <div class="specials-grid">
+      <article class="feature-card peach reveal">
+        <h3>悬浮播放控制</h3>
+        <p>Apple Music、Spotify、QQ音乐、网易云音乐、酷狗、酷我——鼠标悬停画中画底部，直接播放/暂停、上一首/下一首，不用切回音乐 App。</p>
+      </article>
+      <article class="feature-card lavender reveal">
+        <h3>浏览器视频，一键暂停</h3>
+        <p>Safari、Chrome、Edge、Firefox、Arc、Zen 等浏览器里正在播放的视频，以及哔哩哔哩客户端、IINA、QuickTime，画中画上就能直接播放/暂停。</p>
+      </article>
+      <article class="feature-card mint reveal">
+        <h3>实时同步歌词</h3>
+        <p>播放上面这些音乐 App 时，画中画悬浮窗可以叠加显示逐行同步高亮的歌词，自动从网易云音乐、QQ 音乐歌词库匹配。</p>
       </article>
     </div>
   </div>
