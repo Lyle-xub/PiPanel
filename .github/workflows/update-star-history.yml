@@ -22,7 +22,7 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - name: Check out repository
-        uses: actions/checkout@v4
+        uses: actions/checkout@v5
 
       - name: Generate star history chart
         env:
@@ -31,7 +31,7 @@ jobs:
 
       - name: Commit updated chart
         run: |
-          git add docs/assets/star-history.svg
+          git add docs/assets/star-history.json docs/assets/star-history.svg
           if git diff --cached --quiet; then
             echo "Star history is already up to date."
             exit 0

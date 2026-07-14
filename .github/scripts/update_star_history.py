@@ -9,7 +9,6 @@ import os
 import sys
 import urllib.error
 import urllib.request
-from collections import Counter
 from datetime import date, datetime, timezone
 from html import escape
 from pathlib import Path
@@ -17,6 +16,7 @@ from pathlib import Path
 
 API_ROOT = "https://api.github.com"
 OUTPUT = Path("docs/assets/star-history.svg")
+HISTORY = Path("docs/assets/star-history.json")
 
 
 def github_get(path: str, token: str, accept: str) -> object:
@@ -42,30 +42,31 @@ def load_repository(repository: str, token: str) -> dict[str, object]:
     return result
 
 
-def load_stars(repository: str, token: str) -> list[date]:
-    dates: list[date] = []
-    page = 1
+def load_history() -> list[tuple[date, int]]:
+    if not HISTORY.exists():
+        return []
 
-    while True:
-        result = github_get(
-            f"/repos/{repository}/stargazers?per_page=100&page={page}",
-            token,
-            "application/vnd.github.star+json",
-        )
-        if not isinstance(result, list):
-            raise RuntimeError("GitHub returned invalid stargazer data")
+    raw = json.loads(HISTORY.read_text(encoding="utf-8"))
+    if not isinstance(raw, list):
+        raise RuntimeError("Star history file must contain a JSON array")
 
-        for star in result:
-            if not isinstance(star, dict) or not star.get("starred_at"):
-                raise RuntimeError("Stargazer timestamps are unavailable")
-            timestamp = str(star["starred_at"])
-            dates.append(datetime.fromisoformat(timestamp.replace("Z", "+00:00")).date())
+    history: list[tuple[date, int]] = []
+    for entry in raw:
+        if not isinstance(entry, dict):
+            raise RuntimeError("Star history contains an invalid entry")
+        day = date.fromisoformat(str(entry["date"]))
+        stars = int(entry["stars"])
+        if stars < 0:
+            raise RuntimeError("Star count cannot be negative")
+        history.append((day, stars))
+    return sorted(history)
 
-        if len(result) < 100:
-            break
-        page += 1
 
-    return sorted(dates)
+def save_history(history: list[tuple[date, int]]) -> None:
+    data = [{"date": day.isoformat(), "stars": stars} for day, stars in history]
+    HISTORY.write_text(
+        json.dumps(data, ensure_ascii=False, indent=2) + "\n", encoding="utf-8"
+    )
 
 
 def nice_maximum(value: int) -> int:
@@ -77,28 +78,27 @@ def nice_maximum(value: int) -> int:
     return ceiling * magnitude
 
 
-def build_svg(repository: str, created: date, stars: list[date]) -> str:
+def build_svg(
+    repository: str, created: date, history: list[tuple[date, int]]
+) -> str:
     width, height = 960, 480
     left, right, top, bottom = 76, 32, 88, 64
     plot_width = width - left - right
     plot_height = height - top - bottom
     today = datetime.now(timezone.utc).date()
-    end = max(today, created)
-    span = max((end - created).days, 1)
-
-    daily = Counter(stars)
-    points: list[tuple[date, int]] = [(created, 0)]
-    cumulative = 0
-    for day in sorted(daily):
-        cumulative += daily[day]
-        points.append((day, cumulative))
+    values = {created: 0}
+    values.update(history)
+    points = sorted(values.items())
+    start = points[0][0]
+    end = max(today, points[-1][0])
     if points[-1][0] != end:
-        points.append((end, cumulative))
-
-    y_max = nice_maximum(cumulative)
+        points.append((end, points[-1][1]))
+    span = max((end - start).days, 1)
+    current_stars = points[-1][1]
+    y_max = nice_maximum(max(value for _, value in points))
 
     def x(day: date) -> float:
-        return left + ((day - created).days / span) * plot_width
+        return left + ((day - start).days / span) * plot_width
 
     def y(value: int) -> float:
         return top + plot_height - (value / y_max) * plot_height
@@ -123,7 +123,7 @@ def build_svg(repository: str, created: date, stars: list[date]) -> str:
     x_grid: list[str] = []
     seen: set[date] = set()
     for index in range(5):
-        day = created.fromordinal(created.toordinal() + round(span * index / 4))
+        day = date.fromordinal(start.toordinal() + round(span * index / 4))
         if day in seen:
             continue
         seen.add(day)
@@ -139,7 +139,7 @@ def build_svg(repository: str, created: date, stars: list[date]) -> str:
     updated = escape(today.isoformat())
     return f'''<svg xmlns="http://www.w3.org/2000/svg" width="{width}" height="{height}" viewBox="0 0 {width} {height}" role="img" aria-labelledby="title desc">
   <title id="title">{label} Star growth</title>
-  <desc id="desc">{cumulative} GitHub stars as of {updated}</desc>
+  <desc id="desc">{current_stars} GitHub stars as of {updated}</desc>
   <defs>
     <linearGradient id="area" x1="0" y1="0" x2="0" y2="1">
       <stop offset="0%" stop-color="#58a6ff" stop-opacity="0.38" />
@@ -154,7 +154,7 @@ def build_svg(repository: str, created: date, stars: list[date]) -> str:
   <rect width="{width}" height="{height}" rx="14" fill="#0d1117" />
   <text x="{left}" y="38" fill="#f0f6fc" font-size="20" font-weight="600">Star Growth</text>
   <text x="{left}" y="62" fill="#8b949e" font-size="13">{label}</text>
-  <text x="{width - right}" y="44" fill="#f0f6fc" font-size="28" font-weight="700" text-anchor="end">★ {cumulative}</text>
+  <text x="{width - right}" y="44" fill="#f0f6fc" font-size="28" font-weight="700" text-anchor="end">★ {current_stars}</text>
   {''.join(y_grid)}
   {''.join(x_grid)}
   <polygon points="{area_points}" fill="url(#area)" />
@@ -177,15 +177,22 @@ def main() -> int:
         created = datetime.fromisoformat(
             str(metadata["created_at"]).replace("Z", "+00:00")
         ).date()
-        stars = load_stars(repository, token)
-        svg = build_svg(repository, created, stars)
+        current_stars = int(metadata["stargazers_count"])
+        today = datetime.now(timezone.utc).date()
+        values = dict(load_history())
+        if not values and created < today:
+            values[created] = 0
+        values[today] = current_stars
+        history = sorted(values.items())
+        svg = build_svg(repository, created, history)
     except (KeyError, RuntimeError, urllib.error.URLError, ValueError) as error:
         print(f"Unable to generate star history: {error}", file=sys.stderr)
         return 1
 
     OUTPUT.parent.mkdir(parents=True, exist_ok=True)
+    save_history(history)
     OUTPUT.write_text(svg, encoding="utf-8")
-    print(f"Wrote {OUTPUT} with {len(stars)} stars")
+    print(f"Wrote {OUTPUT} with {current_stars} stars")
     return 0
 
 
