@@ -81,8 +81,8 @@ def nice_maximum(value: int) -> int:
 def build_svg(
     repository: str, created: date, history: list[tuple[date, int]]
 ) -> str:
-    width, height = 960, 480
-    left, right, top, bottom = 76, 32, 88, 64
+    width, height = 800, 533
+    left, right, top, bottom = 72, 28, 96, 96
     plot_width = width - left - right
     plot_height = height - top - bottom
     today = datetime.now(timezone.utc).date()
@@ -103,64 +103,81 @@ def build_svg(
     def y(value: int) -> float:
         return top + plot_height - (value / y_max) * plot_height
 
-    line_points = " ".join(f"{x(day):.1f},{y(value):.1f}" for day, value in points)
-    area_points = (
-        f"{left},{top + plot_height} {line_points} "
-        f"{x(points[-1][0]):.1f},{top + plot_height}"
+    line_path = " ".join(
+        ("M" if index == 0 else "L") + f" {x(day):.1f} {y(value):.1f}"
+        for index, (day, value) in enumerate(points)
     )
 
-    y_grid: list[str] = []
-    for index in range(6):
-        value = round(y_max * index / 5)
+    def format_stars(value: int) -> str:
+        if value >= 1_000_000:
+            return f"{value / 1_000_000:.1f}".rstrip("0").rstrip(".") + "M"
+        if value >= 1_000:
+            return f"{value / 1_000:.1f}".rstrip("0").rstrip(".") + "K"
+        return str(value)
+
+    y_ticks: list[str] = []
+    for index in range(5):
+        value = round(y_max * index / 4)
         y_pos = y(value)
-        y_grid.append(
-            f'<line x1="{left}" y1="{y_pos:.1f}" x2="{width - right}" '
-            f'y2="{y_pos:.1f}" class="grid" />'
-            f'<text x="{left - 14}" y="{y_pos + 4:.1f}" text-anchor="end" '
-            f'class="axis">{value}</text>'
+        label_text = "" if value == 0 else format_stars(value)
+        y_ticks.append(
+            f'<line x1="{left - 5}" y1="{y_pos:.1f}" x2="{left}" '
+            f'y2="{y_pos:.1f}" class="tick-mark" />'
+            f'<text x="{left - 12}" y="{y_pos + 5:.1f}" text-anchor="end" '
+            f'class="tick-label">{label_text}</text>'
         )
 
-    x_grid: list[str] = []
+    x_ticks: list[str] = []
     seen: set[date] = set()
-    for index in range(5):
-        day = date.fromordinal(start.toordinal() + round(span * index / 4))
+    for index in range(6):
+        day = date.fromordinal(start.toordinal() + round(span * index / 5))
         if day in seen:
             continue
         seen.add(day)
         x_pos = x(day)
-        x_grid.append(
-            f'<line x1="{x_pos:.1f}" y1="{top}" x2="{x_pos:.1f}" '
-            f'y2="{top + plot_height}" class="grid" />'
-            f'<text x="{x_pos:.1f}" y="{height - 30}" text-anchor="middle" '
-            f'class="axis">{day:%Y-%m-%d}</text>'
+        if span >= 730:
+            tick_text = f"{day:%Y}"
+        elif span >= 90:
+            tick_text = f"{day:%b %Y}"
+        else:
+            tick_text = f"{day:%b %d}"
+        x_ticks.append(
+            f'<line x1="{x_pos:.1f}" y1="{top + plot_height}" '
+            f'x2="{x_pos:.1f}" y2="{top + plot_height + 5}" class="tick-mark" />'
+            f'<text x="{x_pos:.1f}" y="{top + plot_height + 27}" '
+            f'text-anchor="middle" class="tick-label">{tick_text}</text>'
         )
 
     label = escape(repository)
     updated = escape(today.isoformat())
-    return f'''<svg xmlns="http://www.w3.org/2000/svg" width="{width}" height="{height}" viewBox="0 0 {width} {height}" role="img" aria-labelledby="title desc">
+    return f'''<svg xmlns="http://www.w3.org/2000/svg" width="{width}" height="{height}" viewBox="0 0 {width} {height}" role="img" aria-labelledby="title desc" style="background:#fff">
   <title id="title">{label} Star growth</title>
   <desc id="desc">{current_stars} GitHub stars as of {updated}</desc>
   <defs>
-    <linearGradient id="area" x1="0" y1="0" x2="0" y2="1">
-      <stop offset="0%" stop-color="#58a6ff" stop-opacity="0.38" />
-      <stop offset="100%" stop-color="#58a6ff" stop-opacity="0.03" />
-    </linearGradient>
+    <filter id="xkcdify" x="-4%" y="-4%" width="108%" height="108%">
+      <feTurbulence type="fractalNoise" baseFrequency="0.025" numOctaves="2" seed="11" result="noise" />
+      <feDisplacementMap in="SourceGraphic" in2="noise" scale="1.2" xChannelSelector="R" yChannelSelector="G" />
+    </filter>
   </defs>
   <style>
-    text {{ font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; }}
-    .grid {{ stroke: #30363d; stroke-width: 1; }}
-    .axis {{ fill: #8b949e; font-size: 12px; }}
+    text {{ font-family: "Comic Sans MS", "Bradley Hand", "Segoe Print", cursive; fill: #000; }}
+    .axis-line {{ fill: none; stroke: #000; stroke-width: 2; }}
+    .tick-mark {{ stroke: #000; stroke-width: 1.5; }}
+    .tick-label {{ font-size: 16px; }}
+    .axis-title {{ font-size: 17px; }}
   </style>
-  <rect width="{width}" height="{height}" rx="14" fill="#0d1117" />
-  <text x="{left}" y="38" fill="#f0f6fc" font-size="20" font-weight="600">Star Growth</text>
-  <text x="{left}" y="62" fill="#8b949e" font-size="13">{label}</text>
-  <text x="{width - right}" y="44" fill="#f0f6fc" font-size="28" font-weight="700" text-anchor="end">★ {current_stars}</text>
-  {''.join(y_grid)}
-  {''.join(x_grid)}
-  <polygon points="{area_points}" fill="url(#area)" />
-  <polyline points="{line_points}" fill="none" stroke="#58a6ff" stroke-width="3" stroke-linejoin="round" stroke-linecap="round" />
-  <circle cx="{x(points[-1][0]):.1f}" cy="{y(points[-1][1]):.1f}" r="5" fill="#58a6ff" stroke="#0d1117" stroke-width="2" />
-  <text x="{width - right}" y="{height - 12}" fill="#6e7681" font-size="11" text-anchor="end">Updated {updated} UTC · GitHub Actions</text>
+  <rect width="{width}" height="{height}" fill="#fff" />
+  <text x="50%" y="31" text-anchor="middle" font-size="20" font-weight="700">Star History</text>
+  <rect x="{left + 8}" y="51" width="238" height="32" rx="5" fill="#fff" fill-opacity="0.9" stroke="#000" stroke-width="2" filter="url(#xkcdify)" />
+  <rect x="{left + 15}" y="63" width="8" height="8" rx="2" fill="#dd4528" filter="url(#xkcdify)" />
+  <text x="{left + 29}" y="72" font-size="15">{label}</text>
+  <path d="M {left} {top} L {left} {top + plot_height} L {width - right} {top + plot_height}" class="axis-line" filter="url(#xkcdify)" />
+  {''.join(y_ticks)}
+  {''.join(x_ticks)}
+  <path d="{line_path}" fill="none" stroke="#dd4528" stroke-width="3" stroke-linejoin="round" stroke-linecap="round" filter="url(#xkcdify)" />
+  <text x="{left + plot_width / 2:.1f}" y="{height - 16}" text-anchor="middle" class="axis-title">Date</text>
+  <text x="18" y="{top + plot_height / 2:.1f}" text-anchor="middle" class="axis-title" transform="rotate(-90 18 {top + plot_height / 2:.1f})">GitHub Stars</text>
+  <text x="{width - right}" y="{height - 14}" text-anchor="end" font-size="11" fill="#999">Updated {updated}</text>
 </svg>
 '''
 
