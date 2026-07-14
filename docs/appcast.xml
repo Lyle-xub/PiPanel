@@ -1,0 +1,41 @@
+<?xml version="1.0" encoding="utf-8" standalone="yes"?>
+<rss xmlns:sparkle="http://www.andymatuschak.org/xml-namespaces/sparkle" version="2.0">
+    <channel>
+        <title>PiPanel Updates</title>
+        <link>https://pipanel.app/</link>
+        <description>PiPanel 的稳定版自动更新</description>
+        <language>zh-cn</language>
+        <item>
+            <title>0.1.0</title>
+            <pubDate>Wed, 15 Jul 2026 05:52:07 +0800</pubDate>
+            <link>https://pipanel.app/</link>
+            <sparkle:version>1</sparkle:version>
+            <sparkle:shortVersionString>0.1.0</sparkle:shortVersionString>
+            <sparkle:minimumSystemVersion>14.0</sparkle:minimumSystemVersion>
+            <description sparkle:format="markdown"><![CDATA[# PiPanel 0.1.0
+
+PiPanel 的首个公开发行版本。
+
+## 主要功能
+
+- 将任意可捕获的 macOS 窗口转为可交互画中画
+- 支持画中画内点击、滚动与键盘输入
+- 支持多画中画、自动堆叠与全局快捷键
+- 支持窗口实时缩放、画质与虚拟显示器分辨率调整
+- 支持画中画歌词、外观自定义和多种关闭方式
+- 支持自动检查、下载并安装后续更新
+
+## 系统要求
+
+- macOS 14 Sonoma 或更高版本
+- Apple Silicon 或 Intel 64 位 Mac
+- 屏幕录制与辅助功能权限
+
+## 首次安装说明
+
+当前首个发行包使用临时代码签名，尚未经过 Apple Developer ID 公证。如果 macOS 阻止首次启动，请在 Finder 中右键 PiPanel，选择“打开”，并在系统提示中再次确认。
+]]></description>
+            <enclosure url="https://github.com/Lyle-xub/PiPanel/releases/download/v0.1.0/PiPanel-0.1.0-macOS-universal.zip" length="5240543" type="application/octet-stream" sparkle:edSignature="UUydrWH34TO+Kr5FlwKHMn+me0BI2yTes7YfzRx+/SFHJ0HEXsErjh+ClAoKwmHNoIKxIzIX/DanrJDB0sREBQ=="/>
+        </item>
+    </channel>
+</rss>
