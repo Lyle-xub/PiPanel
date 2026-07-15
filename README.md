@@ -94,6 +94,3 @@
 
 [![PiPanel Star History](docs/assets/star-history.svg)](https://github.com/Lyle-xub/PiPanel/stargazers)
 
-## 许可证
-
-本仓库目前尚未附带开源许可证。在正式添加 `LICENSE` 文件前，请勿假定代码可以被自由复制、重新分发或用于商业产品。如有相关需求，请先联系项目维护者。
