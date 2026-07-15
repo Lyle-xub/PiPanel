@@ -19,17 +19,25 @@
 
 ## 功能演示
 
-点击预览图即可播放完整演示视频。
+### 全屏控制
 
-| 全屏控制 | 文件拖拽 |
-| --- | --- |
-| [![全屏控制演示](docs/视频/全屏控制.jpg)](https://pipanel.app/%E8%A7%86%E9%A2%91/%E5%85%A8%E5%B1%8F%E6%8E%A7%E5%88%B6.mp4) | [![文件拖拽演示](docs/视频/文件拖拽.jpg)](https://pipanel.app/%E8%A7%86%E9%A2%91/%E6%96%87%E4%BB%B6%E6%8B%96%E6%8B%BD.mp4) |
-| **视频播放** | **贴边隐藏** |
-| [![视频播放演示](docs/视频/视频播放.jpg)](https://pipanel.app/%E8%A7%86%E9%A2%91/%E8%A7%86%E9%A2%91%E6%92%AD%E6%94%BE.mp4) | [![贴边隐藏演示](docs/视频/贴边隐藏.jpg)](https://pipanel.app/%E8%A7%86%E9%A2%91/%E8%B4%B4%E8%BE%B9%E9%9A%90%E8%97%8F.mp4) |
+https://github.com/user-attachments/assets/11f13011-8b0f-44ec-ab1f-941a3d370d34
+
+### 文件拖拽
+
+https://github.com/user-attachments/assets/2faa88d4-ddab-40cc-b14d-4f63a1b0de4b
+
+### 视频播放
+
+https://github.com/user-attachments/assets/50f076e1-1efc-4758-bd8c-f0d2925f0742
+
+### 贴边隐藏
+
+https://github.com/user-attachments/assets/a00cda1e-3fa3-4689-b9c2-9a5e022e130e
 
 ### 音乐控制
 
-[![音乐控制演示](docs/视频/音乐控制.jpg)](https://pipanel.app/%E8%A7%86%E9%A2%91/%E9%9F%B3%E4%B9%90%E6%8E%A7%E5%88%B6.mp4)
+https://github.com/user-attachments/assets/841c1ea2-02f0-4db0-86b5-18bd1c2772b2
 
 ## PiPanel 有什么不同
 
@@ -93,4 +101,3 @@
 如果 PiPanel 对你有帮助，欢迎点一个 Star。你的支持会帮助更多人发现这个项目。
 
 [![PiPanel Star History](docs/assets/star-history.svg)](https://github.com/Lyle-xub/PiPanel/stargazers)
-
