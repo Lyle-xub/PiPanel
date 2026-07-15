@@ -1,6 +1,6 @@
 /// Serializes every operation that can mutate or react to the process-wide display topology:
-/// shared-display warm-up and existing-session re-anchoring. Ordinary PiP open/close now only
-/// leases/returns a logical layer on the stable host.
+/// pool warm-up/overflow creation, virtual-display mode changes, exceptional slot teardown, and
+/// existing-session re-anchoring. Ordinary PiP open/close now only leases/returns a stable host.
 ///
 /// Multi-session testing (M4) found that starting two sessions back-to-back (e.g. picking a
 /// second window from the picker while the first was still spinning up) could leave the

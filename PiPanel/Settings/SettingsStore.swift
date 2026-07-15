@@ -153,9 +153,15 @@ final class SettingsStore: ObservableObject {
     @Published var targetFPS: Int {
         didSet { UserDefaults.standard.set(targetFPS, forKey: Keys.targetFPS) }
     }
-    /// The pixel long edge available to each source window inside the shared canvas. It is a
-    /// session-local workspace limit, not the CGVirtualDisplay's own mode; changing it therefore
-    /// applies live without reconfiguring displays or flashing the user's screens.
+    /// The private virtual display's pixel long edge (CaptureSession.virtualDisplayLongEdge) —
+    /// how much room a PiP session's source window has to be resized into. Applied at session
+    /// creation (PiPSessionManager.startSession) and also pushed live into every already-open
+    /// session (PiPSessionManager.observeLiveSettings) — CaptureSession's own didSet on
+    /// virtualDisplayLongEdge live-resizes the running VirtualDisplayHost, which works even against
+    /// a display an SCStream is already capturing (see VirtualDisplayHost.resize's doc comment;
+    /// verified in Spikes/VirtualDisplayResizeSpike). Floor of 1280 in the settings UI matches the
+    /// "normal monitor" size CaptureSession's own comments document as the smallest that reliably
+    /// avoids macOS placing/mirroring the virtual display at the wrong origin.
     @Published var virtualDisplayLongEdge: Double {
         didSet { UserDefaults.standard.set(virtualDisplayLongEdge, forKey: Keys.virtualDisplayLongEdge) }
     }

@@ -135,74 +135,36 @@ final class VirtualDisplayIntrusionPolicyTests: XCTestCase {
     }
 }
 
-final class SharedVirtualCanvasLayoutTests: XCTestCase {
-    func testSharedWorkspacePreservesEdgeAndMenuBarMargins() {
-        let workspace = SharedVirtualCanvasLayout.workspaceFrame(
-            in: CGSize(width: 2560, height: 1600)
-        )
-
-        XCTAssertEqual(workspace, CGRect(x: 40, y: 44, width: 2480, height: 1516))
+final class VirtualDisplayPoolPolicyTests: XCTestCase {
+    func testOnlyTwoDisplaysArePrewarmedAtLaunch() {
+        XCTAssertEqual(VirtualDisplayPoolPolicy.initialWarmCapacity, 2)
     }
 
-    func testInvalidCanvasProducesNoWorkspace() {
-        XCTAssertEqual(SharedVirtualCanvasLayout.workspaceFrame(in: .zero), .zero)
-    }
-
-    func testOversizedSourceIsScaledUniformlyIntoSlot() {
-        XCTAssertEqual(
-            SharedVirtualCanvasLayout.sizeFitting(
-                CGSize(width: 3000, height: 2000),
-                within: CGSize(width: 1200, height: 800)
-            ),
-            CGSize(width: 1200, height: 800)
-        )
-    }
-
-    func testSmallSourceIsNotUpscaled() {
-        XCTAssertEqual(
-            SharedVirtualCanvasLayout.sizeFitting(
-                CGSize(width: 800, height: 500),
-                within: CGSize(width: 1200, height: 800)
-            ),
-            CGSize(width: 800, height: 500)
-        )
-    }
-
-    func testSlotOwnershipUsesWindowCenter() {
-        let slot = CGRect(x: 40, y: 44, width: 1280, height: 800)
+    func testFirstThreeReusableDisplaysRemainWarm() {
         XCTAssertTrue(
-            SharedVirtualCanvasLayout.ownsCenter(
-                of: CGRect(x: 1200, y: 100, width: 200, height: 400),
-                workspaceFrame: slot
+            VirtualDisplayPoolPolicy.shouldRetainReleasedDisplay(
+                reusable: true,
+                currentPoolCount: 3
             )
         )
+    }
+
+    func testDisplayBeyondWarmCapacityIsReclaimed() {
         XCTAssertFalse(
-            SharedVirtualCanvasLayout.ownsCenter(
-                of: CGRect(x: 1320, y: 100, width: 800, height: 600),
-                workspaceFrame: slot
+            VirtualDisplayPoolPolicy.shouldRetainReleasedDisplay(
+                reusable: true,
+                currentPoolCount: 4
             )
         )
     }
-}
 
-final class SharedVirtualCanvasLeaseAllocatorTests: XCTestCase {
-    func testConcurrentLayersHaveUniqueIdentitiesWithoutFixedCapacity() {
-        var allocator = SharedVirtualCanvasLeaseAllocator()
-        let identities = (0..<12).map { _ in allocator.lease() }
-
-        XCTAssertEqual(Set(identities).count, 12)
-        XCTAssertEqual(allocator.activeIDs.count, 12)
-    }
-
-    func testReleasedIdentityIsReusedWithoutAffectingOtherLayers() {
-        var allocator = SharedVirtualCanvasLeaseAllocator()
-        let first = allocator.lease()
-        let second = allocator.lease()
-        allocator.release(first)
-
-        XCTAssertEqual(allocator.lease(), first)
-        XCTAssertTrue(allocator.activeIDs.contains(second))
-        XCTAssertEqual(allocator.activeIDs.count, 2)
+    func testContaminatedDisplayIsAlwaysReclaimed() {
+        XCTAssertFalse(
+            VirtualDisplayPoolPolicy.shouldRetainReleasedDisplay(
+                reusable: false,
+                currentPoolCount: 2
+            )
+        )
     }
 }
 

@@ -114,8 +114,8 @@ final class PiPSessionManager: NSObject, ObservableObject {
     private var membershipLimitMessageResetTask: Task<Void, Never>?
 
     private enum Constants {
-        /// Non-members can run exactly one PiP session at a time; membership unlocks concurrent
-        /// logical layers on the shared canvas. Everything else in the app stays fully
+        /// Non-members can run exactly one PiP session at a time; membership removes the cap
+        /// entirely. Everything else in the app (auto-hide, resize, appearance, etc.) stays fully
         /// usable either way — this is the one place session *count* itself is gated, mirroring
         /// how MembershipGate already gates the settings UI's customization options.
         static let freeSessionLimit = 1
@@ -325,10 +325,11 @@ final class PiPSessionManager: NSObject, ObservableObject {
     }
 
     /// Most settings here are only ever read once, at startSession's own call site. Frame rate,
-    /// virtualDisplayLongEdge ("源窗口工作区") and captureOutputLongEdge ("画面清晰度") are the
-    /// exceptions: they apply live to sessions that are already open. CaptureSession's own didSet
-    /// on each property does the actual live-apply work (a workspace-local limit for the former,
-    /// an immediate SCStreamConfiguration update for the latter) — this just
+    /// virtualDisplayLongEdge ("虚拟显示器分辨率") and captureOutputLongEdge ("画面清晰度") are the
+    /// exceptions: they apply live to sessions that are already open, the same way
+    /// BetterDisplay's own resolution tool does against a virtual display it's already streaming.
+    /// CaptureSession's own didSet on each property does the actual live-apply work (a coalesced
+    /// resize for the former, an immediate SCStreamConfiguration update for the latter) — this just
     /// has to re-set that property on every currently-open session whenever the setting changes,
     /// since nothing else in the app currently pushes a SettingsStore change into an
     /// already-running CaptureSession instance.
@@ -347,6 +348,7 @@ final class PiPSessionManager: NSObject, ObservableObject {
                 for session in self?.sessions ?? [] {
                     session.captureSession.virtualDisplayLongEdge = newValue
                 }
+                VirtualDisplayPool.shared.scheduleAvailableDisplayResize(longEdge: CGFloat(newValue))
             }
             .store(in: &settingsCancellables)
         SettingsStore.shared.$captureOutputLongEdge
@@ -500,6 +502,7 @@ final class PiPSessionManager: NSObject, ObservableObject {
            let liveFrame = AXWindowLocator.frame(of: axWindow) {
             windowInfo.frame = liveFrame
         }
+        let siblingCaptureSessions = sessions.map(\.captureSession)
         // A brand-new panel would join the group at its own defaultPanelFrame position while
         // every existing one still sits stacked and unclickable-except-to-expand
         // (PiPVideoLayerView.isPartOfStack) — a confusing half-stacked state. Expanding first
@@ -549,7 +552,7 @@ final class PiPSessionManager: NSObject, ObservableObject {
             defer { self.startingSourcePIDs.remove(windowInfo.ownerPID) }
             debugTrace("calling captureSession.start()")
             do {
-                try await captureSession.start()
+                try await captureSession.start(reanchoring: siblingCaptureSessions)
                 debugTrace("captureSession.start() returned successfully")
                 await self.stabilizePanelPlacement(
                     for: session,
@@ -618,7 +621,7 @@ final class PiPSessionManager: NSObject, ObservableObject {
 
     private func showMembershipLimitMessage() {
         membershipLimitMessageResetTask?.cancel()
-        membershipLimitMessage = "免费版最多同时开启 1 个画中画，专业版可开启多个画中画"
+        membershipLimitMessage = "免费版最多同时开启 1 个画中画，购买专业版解锁无限数量"
         // The @Published property above only ever reaches WindowPickerView's own inline banner,
         // which is silently invisible unless the menu bar dropdown happens to already be open at
         // this exact moment — not the case for either of this method's other two callers

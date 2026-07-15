@@ -56,7 +56,7 @@ struct GeneralSettingsView: View {
                     )
 
                     SliderSettingRow(
-                        title: "源窗口工作区",
+                        title: "虚拟显示器分辨率",
                         valueText: {
                             let size = VirtualDisplayHost.pixelSize(forLongEdge: settings.virtualDisplayLongEdge)
                             return "\(size.width) × \(size.height)"
@@ -64,7 +64,7 @@ struct GeneralSettingsView: View {
                         value: $settings.virtualDisplayLongEdge,
                         range: 1280...2560,
                         step: 128,
-                        hint: "限制每个源窗口在共享画布中可使用的空间；调整时不会重建显示器"
+                        hint: "决定画中画窗口最大能拉伸到多大；对已打开的画中画立即生效"
                     )
 
                     SliderSettingRow(
