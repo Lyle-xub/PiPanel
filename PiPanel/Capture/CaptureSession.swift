@@ -14,9 +14,10 @@ enum CaptureSessionError: Error {
     case virtualDisplayNotVisibleToScreenCaptureKit
 }
 
-/// Owns one PiP capture session: leases a private virtual display from VirtualDisplayPool,
-/// relocates the source window onto it via Accessibility, and streams that display via
-/// ScreenCaptureKit. The display normally outlives this session and is returned to the pool.
+/// Owns one PiP capture session: leases a logical layer of the application-lifetime shared virtual
+/// canvas, relocates the source window into its common workspace via Accessibility, and captures
+/// only that source window through ScreenCaptureKit. Source windows may overlap on the hidden
+/// canvas; the per-window SCContentFilter is the isolation boundary between sessions.
 ///
 /// Why a virtual display instead of capturing the window in place: SCContentFilter's two
 /// window-scoped filter types were both verified (Spikes/CaptureSpike) to break for this
@@ -57,6 +58,7 @@ final class CaptureSession: NSObject {
     weak var delegate: CaptureSessionDelegate?
 
     private(set) var virtualDisplayHost: VirtualDisplayHost?
+    private(set) var virtualDisplayLease: VirtualDisplayPool.Lease?
     private(set) var originalFrame: CGRect?
     private(set) var axWindow: AXUIElement?
     private(set) var framedRect: CGRect = .zero
@@ -198,14 +200,9 @@ final class CaptureSession: NSObject {
     static func effectiveFrameRate(requested: Int, displayMaximum: Int) -> Int {
         min(max(requested, 1), max(displayMaximum, 1))
     }
-    /// The private virtual display's pixel long edge. Before start() runs (virtualDisplayHost ==
-    /// nil), setting this just records the size start() will create the display at — set once by
-    /// PiPSessionManager right after construction, same as targetFPS. Once a session is live, a
-    /// change instead live-resizes the *existing* VirtualDisplayHost via
-    /// VirtualDisplayHost.resize(pixelWidth:pixelHeight:) — confirmed working in
-    /// Spikes/VirtualDisplayResizeSpike even against a display an SCStream is already actively
-    /// capturing (see that method's own doc comment for why an earlier attempt at this looked
-    /// broken and wasn't).
+    /// Per-session source-workspace ceiling. Changing it only resizes/moves this session's source
+    /// inside the shared canvas workspace; it never reapplies the CGVirtualDisplay mode, so a
+    /// settings-slider drag cannot trigger a WindowServer display reconfiguration or screen flash.
     var virtualDisplayLongEdge: CGFloat = CGFloat(VirtualDisplayHost.maxPixelsWide) {
         didSet {
             guard virtualDisplayHost != nil, oldValue != virtualDisplayLongEdge else { return }
@@ -219,7 +216,7 @@ final class CaptureSession: NSObject {
             Task {
                 while let longEdge = pendingVirtualDisplayLongEdge {
                     pendingVirtualDisplayLongEdge = nil
-                    await applyVirtualDisplayResize(longEdge: longEdge)
+                    await applyWorkspaceResolutionLimit(longEdge: longEdge)
                 }
                 isResizingVirtualDisplay = false
             }
@@ -235,30 +232,22 @@ final class CaptureSession: NSObject {
     /// but this is the one case where the ceiling can legitimately go back up.
     var onDeliverableSizeChanged: (() -> Void)?
 
-    private func applyVirtualDisplayResize(longEdge: CGFloat) async {
-        guard let host = virtualDisplayHost else { return }
-        // Applying a new CGVirtualDisplay mode is a process-wide topology mutation, just like
-        // creating/destroying a host. Serialize it with startup, teardown and re-anchoring so an
-        // old session can never read the half-reflowed desktop produced between apply(_:) and the
-        // window server's final arrangement notification.
+    private func applyWorkspaceResolutionLimit(longEdge _: CGFloat) async {
+        guard let host = virtualDisplayHost, let lease = virtualDisplayLease else { return }
         await VirtualDisplayCoordinator.shared.lock()
-        guard !isStopping, virtualDisplayHost === host else {
+        guard !isStopping, virtualDisplayHost === host,
+              virtualDisplayLease?.layerID == lease.layerID else {
             await VirtualDisplayCoordinator.shared.unlock()
             return
         }
-        let pixelSize = VirtualDisplayHost.pixelSize(forLongEdge: longEdge)
-        let resized = await MainActor.run { host.resize(pixelWidth: pixelSize.width, pixelHeight: pixelSize.height) }
-        guard resized else {
-            await VirtualDisplayCoordinator.shared.unlock()
-            debugTrace("vdisplay: live resize FAILED requestedLongEdge=\(longEdge) pixelSize=(\(pixelSize.width), \(pixelSize.height))")
-            return
+        if presentationState == .pip, let axWindow {
+            let capacity = effectiveWorkspaceFrame(for: lease).size
+            let fitted = SharedVirtualCanvasLayout.sizeFitting(currentPiPSize, within: capacity)
+            if fitted != .zero, fitted != currentPiPSize {
+                currentPiPSize = fitted
+                try? await moveWindowOntoVirtualDisplay(host: host, axWindow: axWindow, size: fitted)
+            }
         }
-        debugTrace("vdisplay: live resize applied requestedLongEdge=\(longEdge) pixelSize=(\(pixelSize.width), \(pixelSize.height)) coordinateBounds=\(host.bounds)")
-
-        // The mode changed underneath the running SCStream. Updating only VirtualDisplayHost's
-        // bookkeeping changes later clamp calculations, but leaves the stream configured against
-        // the old display/crop dimensions until some unrelated panel resize happens. Refresh it
-        // immediately so the setting has an observable effect even while the panel is idle.
         try? await applyConfiguration()
         await VirtualDisplayCoordinator.shared.unlock()
 
@@ -292,7 +281,7 @@ final class CaptureSession: NSObject {
     /// actually deliver — see panel.maxSize's doc comment for why that matters.
     static let edgeMargin: CGFloat = 40
 
-    func start(reanchoring siblingSessions: [CaptureSession] = []) async throws {
+    func start() async throws {
         // Serialized: see VirtualDisplayCoordinator for why concurrent session startups aren't safe.
         await VirtualDisplayCoordinator.shared.lock()
         defer { Task { await VirtualDisplayCoordinator.shared.unlock() } }
@@ -303,68 +292,17 @@ final class CaptureSession: NSObject {
         self.axWindow = axWindow
         let originalFrame = AXWindowLocator.frame(of: axWindow) ?? windowInfo.frame
         self.originalFrame = originalFrame
-        currentPiPSize = originalFrame.size
-
-        // Leased from the application-level pool at whatever virtualDisplayLongEdge currently is
-        // (SettingsStore.
-        // virtualDisplayLongEdge, defaulting to VirtualDisplayHost's maxPixelsWide/maxPixelsHigh
-        // ceiling) — generous rather than floored/sized to just the window's own size, so a later
-        // PiP-panel resize (resizeSourceWindow) has room to grow the window into without
-        // necessarily needing to change the display's own resolution mid-session. It also *can*
-        // change mid-session now, live, via virtualDisplayLongEdge's own didSet calling
-        // VirtualDisplayHost.resize(pixelWidth:pixelHeight:) — see that method's doc comment for
-        // how this was verified to actually work even against an actively-capturing SCStream, and
-        // VirtualDisplayHost.bounds's doc comment for the one wrinkle (CGDisplayBounds itself never
-        // reflects the new size, so bounds tracks it independently instead). SCStreamConfiguration.
-        // sourceRect already crops the capture down to just the window's own rect regardless of how
-        // big the underlying display canvas is (see makeConfiguration), so there's no meaningful
-        // capture-bandwidth cost to the display being bigger than the window actually needs.
-        //
-        // CGVirtualDisplay must be created on the main thread — off-main creation was
-        // observed to silently produce a display that never shows up in
-        // SCShareableContent's display list.
-        let virtualDisplayPixelSize = VirtualDisplayHost.pixelSize(forLongEdge: virtualDisplayLongEdge)
-        let pooledLease = await MainActor.run {
-            VirtualDisplayPool.shared.lease(
-                pixelWidth: virtualDisplayPixelSize.width,
-                pixelHeight: virtualDisplayPixelSize.height
-            )
+        guard let pooledLease = await MainActor.run(body: { VirtualDisplayPool.shared.lease() }) else {
+            throw CaptureSessionError.virtualDisplayCreationFailed
         }
-        let host: VirtualDisplayHost
-        let createdDuringStart: Bool
-        let mutatedTopology: Bool
-        if let pooledLease {
-            host = pooledLease.host
-            createdDuringStart = false
-            mutatedTopology = pooledLease.mutatedTopology
-        } else {
-            host = try await MainActor.run { () -> VirtualDisplayHost in
-                guard let host = VirtualDisplayHost(
-                    pixelWidth: virtualDisplayPixelSize.width,
-                    pixelHeight: virtualDisplayPixelSize.height,
-                    name: "PiPanel Overflow – \(windowInfo.ownerAppName)"
-                ) else {
-                    throw CaptureSessionError.virtualDisplayCreationFailed
-                }
-                VirtualDisplayPool.shared.adoptLeased(host)
-                return host
-            }
-            createdDuringStart = true
-            mutatedTopology = true
-        }
+        let host = pooledLease.host
+        virtualDisplayLease = pooledLease
         virtualDisplayHost = host
-
-        // The normal path leases an already-registered host and performs no display mutation at
-        // all. Only an overflow creation or a resolution-mismatch resize needs the expensive
-        // topology barrier and sibling repair used by the former per-session-display design.
-        _ = try await Self.waitForValidBounds(of: host, positionNewDisplay: createdDuringStart)
-        if mutatedTopology {
-            let topologyHosts = [host] + siblingSessions.compactMap(\.virtualDisplayHost)
-            await Self.waitForStableTopology(hosts: topologyHosts)
-            for sibling in siblingSessions where sibling !== self {
-                await sibling.reanchorWhileTopologyLockIsHeld()
-            }
-        }
+        _ = try await Self.waitForValidBounds(of: host, positionNewDisplay: false)
+        currentPiPSize = SharedVirtualCanvasLayout.sizeFitting(
+            originalFrame.size,
+            within: effectiveWorkspaceFrame(for: pooledLease).size
+        )
 
         try await moveWindowOntoVirtualDisplay(
             host: host,
@@ -375,10 +313,10 @@ final class CaptureSession: NSObject {
 
         let scDisplay = try await Self.waitForShareableDisplay(matching: host.displayID)
 
-        // Defense in depth: even if WindowServer produces another late transient placement, an
-        // older session's source is never eligible to appear in this brand-new stream.
-        let siblingWindows = siblingSessions.map { $0.windowInfo.scWindow }
-        let filter = SCContentFilter(display: scDisplay, excludingWindows: siblingWindows)
+        // Window-only filtering is the hard isolation boundary for a shared desktop: even if an
+        // application temporarily moves outside the shared workspace, another session's source is never
+        // eligible to appear in this stream.
+        let filter = SCContentFilter(display: scDisplay, including: [windowInfo.scWindow])
         let config = Self.makeConfiguration(
             for: framedRect,
             displaySize: host.bounds.size,
@@ -405,6 +343,28 @@ final class CaptureSession: NSObject {
         PiPanelLogger.capture.info("Capture started for window \(self.windowInfo.id) (\(self.windowInfo.ownerAppName)) via virtual display \(host.displayID)")
     }
 
+    /// The portion of the shared workspace currently made available to this source window. The
+    /// canvas never changes mode; the user's resolution setting only expands/contracts this local
+    /// region from the workspace's top-left corner.
+    private func effectiveWorkspaceFrame(for lease: VirtualDisplayPool.Lease) -> CGRect {
+        let selectedPixels = VirtualDisplayHost.pixelSize(forLongEdge: virtualDisplayLongEdge)
+        let pointsPerPixel = CGSize(
+            width: lease.host.pixelsPerPoint.width > 0 ? 1 / lease.host.pixelsPerPoint.width : 1,
+            height: lease.host.pixelsPerPoint.height > 0 ? 1 / lease.host.pixelsPerPoint.height : 1
+        )
+        let selectedSize = VirtualDisplayHost.coordinateSize(
+            pixelSize: CGSize(width: selectedPixels.width, height: selectedPixels.height),
+            pointsPerPixel: pointsPerPixel
+        )
+        return CGRect(
+            origin: lease.workspaceFrame.origin,
+            size: CGSize(
+                width: min(lease.workspaceFrame.width, selectedSize.width),
+                height: min(lease.workspaceFrame.height, selectedSize.height)
+            )
+        )
+    }
+
     /// Moves the window onto the virtual display and updates framedRect to match its real
     /// resulting position — shared by start() and enterPiPState() (M3's resume-after-switch-away).
     ///
@@ -421,14 +381,21 @@ final class CaptureSession: NSObject {
         size: CGSize,
         positionNewDisplay: Bool = false
     ) async throws {
-        let margin = VirtualDisplayHost.menuBarInset
+        guard let lease = virtualDisplayLease, lease.host === host else {
+            throw CaptureSessionError.virtualDisplayCreationFailed
+        }
         let bounds = try await Self.waitForValidBounds(
             of: host,
             positionNewDisplay: positionNewDisplay
         )
 
-        let targetOrigin = CGPoint(x: bounds.origin.x + Self.edgeMargin, y: bounds.origin.y + margin)
-        let targetFrame = CGRect(origin: targetOrigin, size: size)
+        let workspaceFrame = effectiveWorkspaceFrame(for: lease)
+        let fittedSize = SharedVirtualCanvasLayout.sizeFitting(size, within: workspaceFrame.size)
+        let targetOrigin = CGPoint(
+            x: bounds.origin.x + workspaceFrame.origin.x,
+            y: bounds.origin.y + workspaceFrame.origin.y
+        )
+        let targetFrame = CGRect(origin: targetOrigin, size: fittedSize)
         AXWindowLocator.setFrame(targetFrame, on: axWindow)
 
         let resultingFrame = await Self.waitForFrameToSettle(axWindow: axWindow, fallback: targetFrame)
@@ -505,20 +472,24 @@ final class CaptureSession: NSObject {
             width: current.width,
             height: current.height
         )
+        if let lease = virtualDisplayLease,
+           !SharedVirtualCanvasLayout.ownsCenter(of: updated, workspaceFrame: lease.workspaceFrame) {
+            debugTrace("vdisplay canvas: source escaped workspace windowID=\(windowInfo.id) layer=\(lease.layerID) localFrame=\(updated) workspace=\(lease.workspaceFrame)")
+            queueReanchorIntoSharedWorkspace(reason: "workspace escape")
+            return
+        }
         guard !Self.isApproximatelyEqual(updated, framedRect) else { return }
         debugTrace("grow: refreshFramedRectIfNeeded correcting framedRect from=\(framedRect) to=\(updated) liveAXFrame=\(current)")
         framedRect = updated
         Task { try? await applyConfiguration() }
     }
 
-    /// Any real display-topology change (an overflow host being created/discarded, a virtual mode
-    /// resize, a physical monitor change, or app shutdown) can make macOS reflow the global desktop
-    /// arrangement. VirtualDisplayHost.bounds already reads that shift live,
+    /// A real monitor change can still reflow the global desktop around the one persistent shared
+    /// canvas. VirtualDisplayHost.bounds already reads that shift live,
     /// but the window itself isn't guaranteed to move in lockstep with its display through a
     /// reflow, so refreshFramedRectIfNeeded's crop math (live window frame − live display origin)
     /// can end up describing a region that no longer actually contains this session's window —
-    /// observed as a still-open PiP silently switching to a different app's content the instant a
-    /// sibling PiP is closed. Re-placing the window onto its own display's *current* bounds after
+    /// Re-placing the window into the shared workspace against the display's *current* bounds after
     /// any screen-configuration change fixes that regardless of the exact way it drifted, since
     /// moveWindowOntoVirtualDisplay always re-derives both the placement and framedRect from
     /// scratch rather than trusting incremental deltas.
@@ -528,7 +499,7 @@ final class CaptureSession: NSObject {
             object: nil,
             queue: .main
         ) { [weak self] _ in
-            self?.reanchorAfterDisplayReconfiguration()
+            self?.queueReanchorIntoSharedWorkspace(reason: "display reconfiguration")
         }
     }
 
@@ -537,29 +508,22 @@ final class CaptureSession: NSObject {
         screenParamsObserver = nil
     }
 
-    private func reanchorAfterDisplayReconfiguration() {
+    private func queueReanchorIntoSharedWorkspace(reason: String) {
         guard presentationState == .pip, !isStopping,
               let host = virtualDisplayHost, let axWindow else { return }
 
-        // Freeze the last known-good crop before doing anything asynchronous. Creating a sibling
-        // display can move this window several thousand points for a fraction of a second; the old
-        // frame watcher used to observe that position and update SCStream immediately, before the
-        // later re-anchor had a chance to correct it.
+        // Freeze the last known-good crop while the physical-display change settles.
         stopFrameWatch()
         guard !isReanchoring else { return }
         isReanchoring = true
         reanchorTaskGeneration &+= 1
         let generation = reanchorTaskGeneration
-        debugTrace("vdisplay: reanchor queued windowID=\(windowInfo.id) displayID=\(host.displayID) liveFrame=\(AXWindowLocator.frame(of: axWindow) ?? .zero) displayBounds=\(host.bounds)")
+        debugTrace("vdisplay: reanchor queued reason=\(reason) windowID=\(windowInfo.id) displayID=\(host.displayID) liveFrame=\(AXWindowLocator.frame(of: axWindow) ?? .zero) displayBounds=\(host.bounds)")
         Task { [weak self] in
             guard let self else { return }
 
-            // CaptureSession.start() holds this same lock from before CGVirtualDisplay.apply(_:)
-            // until its two-phase startup has synchronously repaired every existing session and
-            // started the new stream. A sibling-barrier repair invalidates this queued task; in
-            // every other case waiting here converts a burst of intermediate screen-change
-            // notifications into one correction against the final arrangement. It also serializes
-            // against live mode changes and display teardown below.
+            // Waiting here converts a burst of intermediate screen-change notifications into one
+            // correction against the final arrangement and serializes it with workspace moves.
             await VirtualDisplayCoordinator.shared.lock()
             guard self.reanchorTaskGeneration == generation,
                   !self.isStopping, self.presentationState == .pip,
@@ -587,34 +551,6 @@ final class CaptureSession: NSObject {
                 self.startFrameWatch(axWindow: axWindow, host: host)
             }
         }
-    }
-
-    /// Called only by another CaptureSession.start while that startup owns
-    /// VirtualDisplayCoordinator's lock. Creating its display may have carried this source window
-    /// along with a transient global reflow; repair this session before the newcomer moves its own
-    /// source or starts capturing. This deliberately does not acquire the coordinator again.
-    private func reanchorWhileTopologyLockIsHeld() async {
-        guard presentationState == .pip, !isStopping,
-              let host = virtualDisplayHost, let axWindow,
-              currentPiPSize.width > 0, currentPiPSize.height > 0 else { return }
-
-        stopFrameWatch()
-        debugTrace("vdisplay: sibling barrier reanchor begin windowID=\(windowInfo.id) displayID=\(host.displayID) liveFrame=\(AXWindowLocator.frame(of: axWindow) ?? .zero) displayBounds=\(host.bounds)")
-        do {
-            try await moveWindowOntoVirtualDisplay(host: host, axWindow: axWindow, size: currentPiPSize)
-            try await applyConfiguration()
-        } catch {
-            PiPanelLogger.capture.error("Failed sibling-barrier re-anchor for window \(self.windowInfo.id): \(error)")
-        }
-
-        // Any didChangeScreenParameters task queued by the same topology mutation is now stale:
-        // this synchronous correction consumed it against the stable arrangement.
-        reanchorTaskGeneration &+= 1
-        isReanchoring = false
-        if !isStopping, presentationState == .pip, virtualDisplayHost === host {
-            startFrameWatch(axWindow: axWindow, host: host)
-        }
-        debugTrace("vdisplay: sibling barrier reanchor end windowID=\(windowInfo.id) displayID=\(host.displayID) liveFrame=\(AXWindowLocator.frame(of: axWindow) ?? .zero) displayBounds=\(host.bounds)")
     }
 
     /// The source app just became frontmost (M3) — pull its window back onto the physical
@@ -833,8 +769,10 @@ final class CaptureSession: NSObject {
     /// overall size, so the mirrored window keeps tracking the panel's current proportions even
     /// while pinned at the display's absolute capacity.
     private func clampToDeliverableSize(_ size: CGSize, within bounds: CGRect) -> CGSize {
-        let maxWidth = max(bounds.width - framedRect.origin.x - Self.edgeMargin, 1)
-        let maxHeight = max(bounds.height - framedRect.origin.y - Self.edgeMargin, 1)
+        guard let lease = virtualDisplayLease else { return size }
+        let workspace = effectiveWorkspaceFrame(for: lease)
+        let maxWidth = max(workspace.maxX - framedRect.origin.x, 1)
+        let maxHeight = max(workspace.maxY - framedRect.origin.y, 1)
         guard size.width > 0, size.height > 0, size.width > maxWidth || size.height > maxHeight else {
             return size
         }
@@ -849,21 +787,16 @@ final class CaptureSession: NSObject {
     /// before the virtual display even exists yet — it has to assume VirtualDisplayHost's
     /// aspirational maxPixelsWide/maxPixelsHigh ceiling, since nothing more specific is known yet.
     ///
-    /// This originally carried a warning that CGVirtualDisplay might silently grant less than
-    /// requested under resource pressure (several concurrent sessions active, etc.), with the
-    /// implication that something should poll a live API to detect and correct for it. Two such
-    /// attempts (CGDisplayBounds-based, then SCShareableContent-based — see VirtualDisplayHost.
-    /// bounds's own doc comment for the detailed history) were built and both reverted: neither API
-    /// ever reliably reflects this private API's true applied mode, so "detecting" the supposed
-    /// under-grant just meant clamping every session to one of a small set of bogus placeholder
-    /// sizes, which is strictly worse than the original theoretical risk (never actually confirmed
-    /// to happen) ever was. VirtualDisplayHost.currentPixelSize — what was actually requested via
-    /// init/resize — is trusted unconditionally now.
+    /// The shared display has one fixed launch-time mode. The effective ceiling comes from this
+    /// session's shared workspace plus its session-local resolution setting, so concurrent
+    /// sessions cannot change one another's capacity.
     var deliverableMaxSize: CGSize? {
-        guard let bounds = virtualDisplayHost?.bounds, framedRect.width > 0 else { return nil }
+        guard virtualDisplayHost != nil, let lease = virtualDisplayLease,
+              framedRect.width > 0 else { return nil }
+        let workspace = effectiveWorkspaceFrame(for: lease)
         return CGSize(
-            width: max(bounds.width - framedRect.origin.x - Self.edgeMargin, 1),
-            height: max(bounds.height - framedRect.origin.y - Self.edgeMargin, 1)
+            width: max(workspace.maxX - framedRect.origin.x, 1),
+            height: max(workspace.maxY - framedRect.origin.y, 1)
         )
     }
 
@@ -1129,61 +1062,6 @@ final class CaptureSession: NSObject {
         throw CaptureSessionError.virtualDisplayCreationFailed
     }
 
-    /// CGVirtualDisplay destruction is asynchronous from WindowServer's point of view. Keep the
-    /// topology lock until both PiPanel's registry and CoreGraphics stop reporting the overflow
-    /// display, otherwise a queued startup can lease/read screens during the removal reflow.
-    private static func waitForDisplayRemoval(_ displayID: CGDirectDisplayID) async {
-        for attempt in 0..<20 {
-            let isStillRegisteredByPiPanel = VirtualDisplayHost.activeDisplayIDs.contains(displayID)
-            let bounds = CGDisplayBounds(displayID)
-            if !isStillRegisteredByPiPanel,
-               (CGDisplayIsActive(displayID) == 0 || bounds.width <= 0 || bounds.height <= 0) {
-                debugTrace("vdisplay pool: removal stabilized displayID=\(displayID) attempt=\(attempt)")
-                return
-            }
-            if attempt < 19 {
-                try? await Task.sleep(nanoseconds: 100_000_000)
-            }
-        }
-        debugTrace("vdisplay pool: removal wait timed out displayID=\(displayID) bounds=\(CGDisplayBounds(displayID))")
-    }
-
-    /// CGCompleteDisplayConfiguration returning success does not mean AppKit/CoreGraphics have
-    /// finished publishing the same final arrangement to every client. Require the new display
-    /// and all existing PiP displays to report unchanged bounds for two consecutive samples before
-    /// repairing any carried-along source windows.
-    private static func waitForStableTopology(hosts: [VirtualDisplayHost]) async {
-        var hostsByDisplayID: [CGDirectDisplayID: VirtualDisplayHost] = [:]
-        for host in hosts {
-            hostsByDisplayID[host.displayID] = host
-        }
-        let uniqueHosts = hostsByDisplayID.values.sorted { $0.displayID < $1.displayID }
-        var previousFrames = uniqueHosts.map(\.bounds)
-        var stableSamples = 0
-
-        for _ in 0..<15 {
-            try? await Task.sleep(nanoseconds: 100_000_000)
-            let currentFrames = uniqueHosts.map(\.bounds)
-            let allRegistered = uniqueHosts.allSatisfy(\.isGeometryRegistered)
-            let unchanged = zip(previousFrames, currentFrames).allSatisfy {
-                isApproximatelyEqual($0.0, $0.1)
-            }
-
-            if allRegistered, unchanged {
-                stableSamples += 1
-                if stableSamples >= 2 {
-                    debugTrace("vdisplay: topology barrier stable displays=\(zip(uniqueHosts, currentFrames).map { "\($0.0.displayID):\($0.1)" })")
-                    return
-                }
-            } else {
-                stableSamples = 0
-            }
-            previousFrames = currentFrames
-        }
-
-        debugTrace("vdisplay: topology barrier timed out displays=\(uniqueHosts.map { "\($0.displayID):\($0.bounds)" })")
-    }
-
     /// A newly-created virtual display was observed (Spikes/VirtualDisplaySpike) to take
     /// anywhere from under a second up to ~5s to propagate to this process's
     /// ScreenCaptureKit/AppKit view of the display list — retry with a generous budget rather
@@ -1216,35 +1094,27 @@ final class CaptureSession: NSObject {
         }
         restoreWindowIfNeeded()
         // restoreWindowIfNeeded only *fires* the AX move back to the real screen — the target app
-        // applies it asynchronously. Wait until it lands before marking this display available;
-        // otherwise a new session could lease it while the previous source still occupies it.
+        // applies it asynchronously. Observe where it lands so the recovery log/guard knows
+        // whether an unowned window remains on the shared canvas.
         var hostIsReusable = true
         if let axWindow, let originalFrame, let host = virtualDisplayHost {
             let settledFrame = await Self.waitForFrameToSettle(axWindow: axWindow, fallback: originalFrame)
-            // An app that rejected the restore may still be sitting on this virtual desktop. Do
-            // not hand that desktop to another session, whose display-wide stream could otherwise
-            // include the stale window. Exceptional failed restores discard just this slot.
+            // A stale window cannot leak into another stream: each SCContentFilter includes only
+            // its own source. The value still tells the pool/intrusion guard whether restoration
+            // succeeded and is deliberately retained as a diagnostic signal.
             let overlap = settledFrame.intersection(host.bounds)
             let overlapArea = overlap.isNull ? 0 : overlap.width * overlap.height
             let windowArea = max(settledFrame.width * settledFrame.height, 1)
             hostIsReusable = overlapArea / windowArea < 0.5
         }
-        var hostBeingReleased = virtualDisplayHost
+        let leaseBeingReleased = virtualDisplayLease
+        virtualDisplayLease = nil
         virtualDisplayHost = nil
-        var removedDisplayID: CGDirectDisplayID?
-        if let host = hostBeingReleased {
+        if let leaseBeingReleased {
             let reusable = hostIsReusable
-            let wasRemoved = await MainActor.run {
-                VirtualDisplayPool.shared.release(host, reusable: reusable)
+            await MainActor.run {
+                VirtualDisplayPool.shared.release(leaseBeingReleased, reusable: reusable)
             }
-            if wasRemoved { removedDisplayID = host.displayID }
-        }
-        // Dropping the last strong reference is what actually unregisters CGVirtualDisplay.
-        // Do it while the topology lock is held, then wait until CoreGraphics confirms removal so
-        // a queued startup cannot observe the half-reflowed arrangement.
-        hostBeingReleased = nil
-        if let removedDisplayID {
-            await Self.waitForDisplayRemoval(removedDisplayID)
         }
         await VirtualDisplayCoordinator.shared.unlock()
         PiPanelLogger.capture.info("Capture stopped for window \(self.windowInfo.id)")

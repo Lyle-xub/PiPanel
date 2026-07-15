@@ -98,6 +98,14 @@ enum AXWindowLocator {
         setSize(frame.size, on: window)
     }
 
+    /// Brings a specific source window to the front of the shared hidden canvas. This matters when
+    /// several source windows overlap there: activating an application alone does not select the
+    /// intended window when that application owns multiple PiP sessions.
+    @discardableResult
+    static func raise(_ window: AXUIElement) -> AXError {
+        AXUIElementPerformAction(window, kAXRaiseAction as CFString)
+    }
+
     /// Size-only counterpart to setFrame — for a pure resize (top-left anchor unchanged, e.g.
     /// CaptureSession's PiP-panel resize), skips the redundant position write. Beyond saving one
     /// IPC round trip per call, that extra write was found to matter: sending a "moved" and a

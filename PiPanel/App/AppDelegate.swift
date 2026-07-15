@@ -18,7 +18,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             // the background when possible.
             _ = UpdateManager.shared
 
-            // Build the private-display pool once at launch. Unit tests embed/launch the app too;
+            // Build the single shared virtual canvas once at launch. Unit tests embed/launch the app too;
             // never mutate the developer machine's real display topology for a test host.
             if ProcessInfo.processInfo.environment["XCTestConfigurationFilePath"] == nil {
                 await VirtualDisplayPool.shared.warmUp(

@@ -63,7 +63,8 @@ final class InteractionForwarder {
     // MARK: - Cursor capture
 
     func beginCaptureIfNeeded(atLocalPoint localPoint: CGPoint) {
-        guard !isCaptured, let videoView, let windowFrame = captureSession?.currentSourceWindowFrame() else { return }
+        guard !isCaptured, let captureSession, let videoView,
+              let windowFrame = captureSession.currentSourceWindowFrame() else { return }
         let displayedRect = videoView.displayedVideoRect(nativeSize: videoView.nativeSize)
         guard let virtualPoint = CoordinateTranslator.globalPoint(
             forLocalPoint: localPoint,
@@ -73,6 +74,12 @@ final class InteractionForwarder {
             windowGlobalFrame: windowFrame
         ) else { return }
 
+        // Every session intentionally shares the same hidden workspace. Raise this exact AX window
+        // before warping the real pointer so input cannot land on a different overlapping source,
+        // including another window owned by the same application.
+        if let sourceWindow = captureSession.axWindow {
+            AXWindowLocator.raise(sourceWindow)
+        }
         isCaptured = true
         CGWarpMouseCursorPosition(virtualPoint)
         videoView.showCapturedCursorIndicator(atLocalPoint: localPoint)
@@ -189,6 +196,9 @@ final class InteractionForwarder {
         guard let captureSession, let sourceApp = NSRunningApplication(processIdentifier: captureSession.windowInfo.ownerPID) else { return }
         if previousFrontmostApp == nil {
             previousFrontmostApp = NSWorkspace.shared.frontmostApplication
+        }
+        if let sourceWindow = captureSession.axWindow {
+            AXWindowLocator.raise(sourceWindow)
         }
         guard !sourceApp.isActive else { return }
         // PiPSessionManager should not treat this as the user switching to the app (M3's

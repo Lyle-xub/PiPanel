@@ -40,7 +40,7 @@ private final class ActiveVirtualDisplayRegistry: @unchecked Sendable {
     }
 }
 
-/// Owns one CGVirtualDisplay for the lifetime of a PiP session. The virtual display is a
+/// Owns the single application-lifetime CGVirtualDisplay shared by every PiP session. The display is a
 /// genuinely independent, always-composited display — unlike a window's real display, it never
 /// goes "inactive" when the user full-screens something else on their physical screen, which is
 /// what makes live capture survive full-screen elsewhere (verified in Spikes/VirtualDisplaySpike;
@@ -112,6 +112,10 @@ final class VirtualDisplayHost {
     /// source of truth for `bounds`'s size component. See `bounds`'s doc comment for why a live
     /// CGDisplayBounds read can't be trusted for this past the very first reading.
     private(set) var currentPixelSize: CGSize
+    /// Fixed descriptor ceiling for this host. The shared-canvas host is intentionally larger
+    /// than one session's user-selectable 2560×1600 workspace, so coordinate calibration must use
+    /// the actual descriptor instead of the per-session setting constants below.
+    private let descriptorPixelSize: CGSize
     /// The compositor refresh rate requested for this virtual display. It is initialized from the
     /// fastest currently-connected physical display so a 120/144 Hz source session is not silently
     /// bottlenecked by the old hardcoded 60 Hz virtual mode.
@@ -125,35 +129,9 @@ final class VirtualDisplayHost {
         return raw.width > 0 && raw.height > 0
     }
 
-    /// The display's current bounds in global Quartz coordinate space: origin read live from
-    /// CGDisplayBounds, size derived from currentPixelSize using the pixel-to-point scale captured
-    /// when the display first registers with the window server.
-    ///
-    /// Origin and size need different treatment because they behave differently after a live
-    /// resize(pixelWidth:pixelHeight:) call. Verified in Spikes/VirtualDisplayResizeSpike:
-    /// re-applying a bigger CGVirtualDisplayMode against an already-running (possibly already
-    /// SCStream-capturing) display does genuinely grow its real, capturable canvas — a running
-    /// stream immediately starts delivering full frames at the new size, containing real desktop
-    /// content across the whole new area — but CGDisplayBounds's *size* component never updates to
-    /// reflect that, no matter how long you poll it (confirmed identical readings 5s later). So
-    /// size has to be tracked independently, or every placement/clamp calculation elsewhere in this
-    /// app (CaptureSession's moveWindowOntoVirtualDisplay, clampToDeliverableSize,
-    /// deliverableMaxSize, ...) would keep measuring against the display's stale original size
-    /// forever after the first resize.
-    ///
-    /// Origin is the opposite case: it must stay a *live* CGDisplayBounds read, not cached. Unlike
-    /// size, a display's origin can genuinely change after creation — CaptureSession's own
-    /// reanchorAfterDisplayReconfiguration doc comment documents macOS reflowing the whole desktop
-    /// arrangement (and therefore this display's origin) whenever a sibling PiP session's virtual
-    /// display is created or destroyed (M4: multi-session). Caching origin once, the same way size
-    /// is now tracked, was tried and reverted: it left every *other* already-open session's window
-    /// placement/crop math computed against a stale pre-reflow origin the moment a new session was
-    /// opened, which read as the older PiP's mirrored content drifting into/off of its own frame.
-    ///
-    /// The live CGDisplayBounds size is sampled only once, for coordinate calibration. It is not
-    /// reused as the display's changing capacity because it remains stale after a live mode resize.
-    /// The applied pixel mode remains the capacity source of truth; the stable calibration merely
-    /// translates that capacity into the point space in which AX windows actually resize.
+    /// The shared canvas bounds in global Quartz space. Its origin is read live because plugging
+    /// or rearranging a physical monitor can rebase the desktop; its size is the one fixed mode
+    /// applied at launch, converted into AX point space with the registered coordinate scale.
     var bounds: CGRect {
         let rawBounds = CGDisplayBounds(displayID)
         return CGRect(
@@ -203,10 +181,10 @@ final class VirtualDisplayHost {
         // for the host's lifetime, so it gives every mode one common conversion scale instead.
         pointsPerPixel = Self.coordinateScale(
             registeredSize: registeredBounds.size,
-            descriptorPixelSize: CGSize(width: Self.maxPixelsWide, height: Self.maxPixelsHigh)
+            descriptorPixelSize: descriptorPixelSize
         )
         hasCalibratedCoordinateScale = true
-        debugTrace("vdisplay: calibrated coordinate scale pointsPerPixel=\(pointsPerPixel) registeredBounds=\(registeredBounds) descriptorPixelCeiling=(\(Self.maxPixelsWide), \(Self.maxPixelsHigh)) selectedPixelSize=\(currentPixelSize)")
+        debugTrace("vdisplay: calibrated coordinate scale pointsPerPixel=\(pointsPerPixel) registeredBounds=\(registeredBounds) descriptorPixelCeiling=\(descriptorPixelSize) selectedPixelSize=\(currentPixelSize)")
     }
 
     /// menuBarInset accounts for the strip at the top of every display (real or virtual) that
@@ -214,16 +192,9 @@ final class VirtualDisplayHost {
     /// cropping doesn't clip the window's own title bar against it.
     static let menuBarInset: CGFloat = 44
 
-    /// The display is created at a generous, fixed "biggest normal monitor" canvas by default
-    /// (CaptureSession.start() passes SettingsStore.virtualDisplayLongEdge-derived dimensions,
-    /// which default to this) rather than one sized to the captured window, so a later PiP-panel
-    /// resize (CaptureSession.resizeSourceWindow) always has room to grow the window into without
-    /// necessarily needing to change the display's own resolution mid-session. It *can* also be
-    /// changed live via resize(pixelWidth:pixelHeight:) below — see that method and `bounds`'s own
-    /// doc comments for why an earlier attempt at this looked broken and wasn't.
-    /// SCStreamConfiguration.sourceRect already crops the capture down to just the window's own
-    /// rect regardless of how big this canvas is (see makeConfiguration), so there's no meaningful
-    /// capture-bandwidth cost to a generous ceiling.
+    /// Fixed backing-pixel size of the shared canvas and per-session workspace ceiling exposed in
+    /// settings. Every session may use the complete canvas because ScreenCaptureKit isolates its
+    /// source window at the filter boundary; windows do not need destructive physical partitions.
     static let maxPixelsWide = 2560
     static let maxPixelsHigh = 1600
     static let backingScaleFactor: CGFloat = 2
@@ -251,6 +222,7 @@ final class VirtualDisplayHost {
         refreshRate: Double = Double(DisplayRefreshRate.maximumPhysicalFPS())
     ) {
         currentPixelSize = CGSize(width: pixelWidth, height: pixelHeight)
+        descriptorPixelSize = CGSize(width: pixelWidth, height: pixelHeight)
         currentRefreshRate = max(refreshRate, 1)
         // Must happen before anything below touches CGVirtualDisplay at all — see
         // preCreationDisplays' own doc comment for why.
@@ -260,9 +232,9 @@ final class VirtualDisplayHost {
         debugTrace("vdisplay: pre-creation arrangement \(preCreationDisplays.map { ($0.id, $0.frame) })")
         let descriptor = CGVirtualDisplayDescriptor()
         descriptor.name = name
-        descriptor.maxPixelsWide = UInt32(Self.maxPixelsWide)
-        descriptor.maxPixelsHigh = UInt32(Self.maxPixelsHigh)
-        descriptor.sizeInMillimeters = CGSize(width: CGFloat(Self.maxPixelsWide) / 4, height: CGFloat(Self.maxPixelsHigh) / 4)
+        descriptor.maxPixelsWide = UInt32(pixelWidth)
+        descriptor.maxPixelsHigh = UInt32(pixelHeight)
+        descriptor.sizeInMillimeters = CGSize(width: CGFloat(pixelWidth) / 4, height: CGFloat(pixelHeight) / 4)
         descriptor.serialNum = Self.nextSerialNum
         Self.nextSerialNum += 1
         // Product ID 2 identifies the fixed-HiDPI display schema. Keeping it distinct from the
@@ -569,83 +541,91 @@ final class VirtualDisplayHost {
         return frames.map { (id: $0.key, origin: $0.value.origin, frame: $0.value) }
     }
 
-    /// Live-resizes an already-created — possibly already SCStream-capturing — virtual display, by
-    /// re-applying a new single-mode CGVirtualDisplaySettings against the same CGVirtualDisplay
-    /// instance. Confirmed working in Spikes/VirtualDisplayResizeSpike, including against a display
-    /// an SCStream is actively capturing: the compositor genuinely grows to the new size (a running
-    /// stream immediately starts delivering full frames at the new dimensions, containing real
-    /// desktop content across the whole new area, once its SCStreamConfiguration.width/height is
-    /// also updated to match — CaptureSession's own applyConfiguration already does that for other
-    /// reasons on every resize tick). What doesn't happen is CGDisplayBounds updating to reflect
-    /// it — see `bounds`'s doc comment for why this class stopped trusting that for its own size
-    /// tracking, and why an earlier attempt at exactly this concluded (wrongly) that it "didn't
-    /// reliably take effect": it was watching CGDisplayBounds, the one signal that never moves.
-    ///
-    /// Must run on the main thread, same as init — CGVirtualDisplay is an undocumented private API
-    /// with no guarantee it's thread-safe, and init's own doc comment already documents an observed
-    /// failure mode from calling it off-main.
-    @discardableResult
-    func resize(pixelWidth: Int, pixelHeight: Int) -> Bool {
-        let mode = CGVirtualDisplayMode(
-            width: pixelWidth,
-            height: pixelHeight,
-            refreshRate: currentRefreshRate
+}
+
+/// Pure geometry for the application-lifetime shared virtual desktop. Every session gets the same
+/// full-size workspace; SCContentFilter(display:including:) gives each stream its own composited
+/// window layer even when source windows overlap on this hidden display.
+enum SharedVirtualCanvasLayout {
+    static let sideInset: CGFloat = 40
+    static let bottomInset: CGFloat = 40
+
+    static func workspaceFrame(in canvasSize: CGSize) -> CGRect {
+        guard canvasSize.width > 0, canvasSize.height > 0 else { return .zero }
+        return CGRect(
+            x: sideInset,
+            y: VirtualDisplayHost.menuBarInset,
+            width: max(canvasSize.width - sideInset * 2, 1),
+            height: max(canvasSize.height - VirtualDisplayHost.menuBarInset - bottomInset, 1)
         )
-        let settings = CGVirtualDisplaySettings()
-        settings.modes = [mode]
-        settings.hiDPI = Self.hiDPISetting
-        guard virtualDisplay.apply(settings) else { return false }
-        currentPixelSize = CGSize(width: pixelWidth, height: pixelHeight)
-        return true
+    }
+
+    static func sizeFitting(_ size: CGSize, within capacity: CGSize) -> CGSize {
+        guard size.width > 0, size.height > 0, capacity.width > 0, capacity.height > 0 else {
+            return .zero
+        }
+        let scale = min(1, capacity.width / size.width, capacity.height / size.height)
+        return CGSize(width: size.width * scale, height: size.height * scale)
+    }
+
+    static func ownsCenter(of localWindowFrame: CGRect, workspaceFrame: CGRect) -> Bool {
+        guard localWindowFrame.width > 0, localWindowFrame.height > 0 else { return false }
+        return workspaceFrame.contains(CGPoint(x: localWindowFrame.midX, y: localWindowFrame.midY))
     }
 }
 
-/// Application-lifetime pool of private displays. Creating or destroying CGVirtualDisplay is the
-/// operation that makes WindowServer rebuild the desktop and visibly flash; moving a window onto
-/// an already-registered display does not. PiPanel therefore creates two displays once during
-/// launch, leases one per CaptureSession, and returns it to the pool when that session closes. A
-/// third display can be created on demand and retained; displays beyond that are reclaimed when
-/// their sessions close.
-enum VirtualDisplayPoolPolicy {
-    static let initialWarmCapacity = 2
-    static let retainedCapacity = 3
+/// Small value-type allocator for capture-layer identities. It deliberately has no capacity: the
+/// shared display's geometry is reused, while ScreenCaptureKit and system resources determine the
+/// practical concurrency limit. Released identities are recycled without ever reconfiguring the
+/// display.
+struct SharedVirtualCanvasLeaseAllocator {
+    private(set) var activeIDs: Set<Int> = []
+    private var reusableIDs: [Int] = []
+    private var nextID = 0
 
-    static func shouldRetainReleasedDisplay(reusable: Bool, currentPoolCount: Int) -> Bool {
-        reusable && currentPoolCount <= retainedCapacity
+    mutating func lease() -> Int {
+        let id: Int
+        if let reused = reusableIDs.popLast() {
+            id = reused
+        } else {
+            id = nextID
+            nextID += 1
+        }
+        activeIDs.insert(id)
+        return id
+    }
+
+    mutating func release(_ id: Int) {
+        guard activeIDs.remove(id) != nil else { return }
+        reusableIDs.append(id)
     }
 }
 
+/// Owns one fixed virtual display for the complete application lifetime and issues logical session
+/// leases for its shared workspace. Creating/destroying/resizing CGVirtualDisplay is the operation
+/// that flashes the user's real screens; issuing a lease and moving a window does not touch display
+/// topology at all. Lease IDs are identity tokens, not exclusive geometric partitions.
 @MainActor
 final class VirtualDisplayPool {
     struct Lease {
         let host: VirtualDisplayHost
-        /// True only for a mode resize performed while leasing. The usual pre-warmed path is false
-        /// and can skip all sibling topology repair work during CaptureSession.start().
-        let mutatedTopology: Bool
+        let layerID: Int
+        /// Display-local Quartz coordinates. Add host.bounds.origin for an absolute AX frame.
+        let workspaceFrame: CGRect
     }
 
     static let shared = VirtualDisplayPool()
-    static let warmCapacity = VirtualDisplayPoolPolicy.retainedCapacity
 
-    private struct Slot {
-        let host: VirtualDisplayHost
-        var isLeased: Bool
-    }
-
-    private var slots: [Slot] = []
+    private var host: VirtualDisplayHost?
+    private var leaseAllocator = SharedVirtualCanvasLeaseAllocator()
     private var isWarming = false
     private var warmupWaiters: [CheckedContinuation<Void, Never>] = []
-    private var availableResizeTask: Task<Void, Never>?
 
-    var totalCount: Int { slots.count }
-    var availableCount: Int { slots.filter { !$0.isLeased }.count }
+    var totalCount: Int { host == nil ? 0 : 1 }
+    var activeLeaseCount: Int { leaseAllocator.activeIDs.count }
 
-    /// Called once from AppDelegate. It owns the topology lock across the complete batch so a user
-    /// triggering PiP immediately after launch simply waits for the stable pool instead of racing
-    /// a half-created display arrangement.
-    func warmUp(capacity: Int = VirtualDisplayPoolPolicy.initialWarmCapacity, longEdge: CGFloat) async {
-        let target = min(max(capacity, 1), Self.warmCapacity)
-        if slots.count >= target { return }
+    func warmUp(longEdge _: CGFloat) async {
+        if host != nil { return }
         if isWarming {
             await withCheckedContinuation { continuation in
                 warmupWaiters.append(continuation)
@@ -653,107 +633,48 @@ final class VirtualDisplayPool {
             return
         }
         isWarming = true
-        let pixelSize = VirtualDisplayHost.pixelSize(forLongEdge: longEdge)
 
         await VirtualDisplayCoordinator.shared.lock()
-        var attempts = 0
-        while slots.count < target, attempts < target * 2 {
-            attempts += 1
-            let ordinal = slots.count + 1
-            guard let host = VirtualDisplayHost(
-                pixelWidth: pixelSize.width,
-                pixelHeight: pixelSize.height,
-                name: "PiPanel Virtual Display \(ordinal)"
-            ) else {
-                debugTrace("vdisplay pool: failed to create warm display ordinal=\(ordinal)")
-                break
-            }
-
-            slots.append(Slot(host: host, isLeased: false))
-            guard await prepareNewHost(host) else {
-                slots.removeAll { $0.host === host }
-                debugTrace("vdisplay pool: warm display failed to register ordinal=\(ordinal)")
-                continue
-            }
-            debugTrace("vdisplay pool: warmed displayID=\(host.displayID) count=\(slots.count)")
+        if host == nil,
+           let candidate = VirtualDisplayHost(
+               pixelWidth: VirtualDisplayHost.maxPixelsWide,
+               pixelHeight: VirtualDisplayHost.maxPixelsHigh,
+               name: "PiPanel Shared Canvas"
+           ),
+           await prepareNewHost(candidate) {
+            host = candidate
+            debugTrace("vdisplay canvas: ready displayID=\(candidate.displayID) bounds=\(candidate.bounds) workspace=\(SharedVirtualCanvasLayout.workspaceFrame(in: candidate.bounds.size))")
+        } else if host == nil {
+            debugTrace("vdisplay canvas: failed to create shared display")
         }
         await VirtualDisplayCoordinator.shared.unlock()
+
         isWarming = false
         let waiters = warmupWaiters
         warmupWaiters.removeAll()
         for waiter in waiters { waiter.resume() }
-        debugTrace("vdisplay pool: warm-up complete total=\(totalCount) available=\(availableCount)")
     }
 
-    /// Must be called while CaptureSession owns VirtualDisplayCoordinator's lock. Resizing here is
-    /// only a fallback for a resolution preference changed before idle slots were updated.
-    func lease(pixelWidth: Int, pixelHeight: Int) -> Lease? {
-        guard let index = slots.firstIndex(where: { !$0.isLeased }) else { return nil }
-        let host = slots[index].host
-        let requestedSize = CGSize(width: pixelWidth, height: pixelHeight)
-        var mutatedTopology = false
-        if host.currentPixelSize != requestedSize {
-            guard host.resize(pixelWidth: pixelWidth, pixelHeight: pixelHeight) else { return nil }
-            mutatedTopology = true
-        }
-        slots[index].isLeased = true
-        debugTrace("vdisplay pool: leased displayID=\(host.displayID) available=\(availableCount)")
-        return Lease(host: host, mutatedTopology: mutatedTopology)
+    /// Called while CaptureSession owns VirtualDisplayCoordinator's lock.
+    func lease() -> Lease? {
+        guard let host else { return nil }
+        let layerID = leaseAllocator.lease()
+        let lease = Lease(
+            host: host,
+            layerID: layerID,
+            workspaceFrame: SharedVirtualCanvasLayout.workspaceFrame(in: host.bounds.size)
+        )
+        debugTrace("vdisplay canvas: leased layer=\(layerID) workspace=\(lease.workspaceFrame) active=\(activeLeaseCount)")
+        return lease
     }
 
-    /// Registers an overflow host created by CaptureSession while it already owns the topology
-    /// lock. It remains usable while leased, but release trims the pool back to warmCapacity.
-    func adoptLeased(_ host: VirtualDisplayHost) {
-        guard !slots.contains(where: { $0.host === host }) else { return }
-        slots.append(Slot(host: host, isLeased: true))
-        debugTrace("vdisplay pool: adopted overflow displayID=\(host.displayID) total=\(totalCount)")
-    }
-
-    /// Returns true when the slot was removed and its host should be destroyed by the caller while
-    /// it still owns VirtualDisplayCoordinator's topology lock. Besides contaminated displays,
-    /// every capacity above three is reclaimed as its PiP closes, shrinking 5→4→3 naturally.
-    @discardableResult
-    func release(_ host: VirtualDisplayHost, reusable: Bool) -> Bool {
-        guard let index = slots.firstIndex(where: { $0.host === host }) else { return true }
-        if VirtualDisplayPoolPolicy.shouldRetainReleasedDisplay(
-            reusable: reusable,
-            currentPoolCount: slots.count
-        ) {
-            slots[index].isLeased = false
-            debugTrace("vdisplay pool: returned displayID=\(host.displayID) available=\(availableCount)")
-            return false
-        } else {
-            slots.remove(at: index)
-            let reason = reusable ? "overflow" : "contaminated"
-            debugTrace("vdisplay pool: reclaimed \(reason) displayID=\(host.displayID) total=\(totalCount)")
-            return true
-        }
-    }
-
-    /// Debounces the settings slider before touching idle displays. Without this, every slider
-    /// tick would re-apply a mode to multiple hosts and recreate the exact flashing this pool is
-    /// meant to eliminate. Active slots retain CaptureSession's own depth-1 coalescing path.
-    func scheduleAvailableDisplayResize(longEdge: CGFloat) {
-        availableResizeTask?.cancel()
-        availableResizeTask = Task { @MainActor [weak self] in
-            try? await Task.sleep(nanoseconds: 250_000_000)
-            guard !Task.isCancelled else { return }
-            await self?.resizeAvailableDisplays(longEdge: longEdge)
-        }
-    }
-
-    /// Keeps idle slots aligned with the setting so the next lease remains topology-free. Active
-    /// slots are resized by their own CaptureSession and are deliberately skipped here.
-    private func resizeAvailableDisplays(longEdge: CGFloat) async {
-        let pixelSize = VirtualDisplayHost.pixelSize(forLongEdge: longEdge)
-        await VirtualDisplayCoordinator.shared.lock()
-        for slot in slots where !slot.isLeased {
-            guard slot.host.currentPixelSize != CGSize(width: pixelSize.width, height: pixelSize.height) else {
-                continue
-            }
-            _ = slot.host.resize(pixelWidth: pixelSize.width, pixelHeight: pixelSize.height)
-        }
-        await VirtualDisplayCoordinator.shared.unlock()
+    func release(_ lease: Lease, reusable: Bool) {
+        guard host === lease.host else { return }
+        guard leaseAllocator.activeIDs.contains(lease.layerID) else { return }
+        leaseAllocator.release(lease.layerID)
+        // A failed AX restore no longer poisons part of the canvas: every SCStream includes only
+        // its own source window, and the intrusion guard still moves stale/unowned windows out.
+        debugTrace("vdisplay canvas: released layer=\(lease.layerID) sourceRestored=\(reusable) active=\(activeLeaseCount)")
     }
 
     private func prepareNewHost(_ host: VirtualDisplayHost) async -> Bool {
@@ -762,9 +683,7 @@ final class VirtualDisplayPool {
                 host.positionOutsideExistingDisplays()
                 return await waitForStableBounds(of: host)
             }
-            if attempt < 19 {
-                try? await Task.sleep(nanoseconds: 100_000_000)
-            }
+            if attempt < 19 { try? await Task.sleep(nanoseconds: 100_000_000) }
         }
         return false
     }
