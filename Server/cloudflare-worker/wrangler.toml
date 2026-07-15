@@ -1,0 +1,23 @@
+name = "pipanel-license-server"
+main = "src/index.js"
+compatibility_date = "2026-07-01"
+
+kv_namespaces = [
+  { binding = "PIPANEL_LICENSES", id = "fb915daab0df4cdfb8b860616f2b1feb" }
+]
+
+# Secrets — set with `wrangler secret put <NAME>`, never commit real values here or in the app:
+#   CREEM_API_KEY
+#   CREEM_WEBHOOK_SECRET
+#   RESEND_API_KEY
+
+[vars]
+CREEM_PRODUCT_SINGLE = "prod_aJAzgWzP3hufn7DsvPWVp"
+CREEM_PRODUCT_DUAL = "prod_5AffsrJIKy3bATx756al6D"
+CREEM_PRODUCT_MULTI = "prod_2tsqqJp8CYFndRRvDvr58I"
+CHECKOUT_SUCCESS_URL = "https://lyle-xub.github.io/PiPanel/purchase-success.html"
+RESEND_FROM = "PiPanel <support@pipanel.app>"
+# Creem has a separate test-mode API host — uncomment while validating the full purchase flow
+# against test-mode products/keys, then remove (or leave commented) once going live so the worker
+# defaults back to the production host.
+# CREEM_API_BASE_URL = "https://test-api.creem.io"

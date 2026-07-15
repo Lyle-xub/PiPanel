@@ -1,27 +1,37 @@
 import AppKit
 
-/// A floating circular target shown in the screen's lower half while Option-dragging a PiP
-/// panel — dropping the panel's center inside it closes that panel. This mirrors the classic
-/// "drag an icon onto the Dock's trash to delete it" gesture: a specific, discoverable, visually
-/// obvious target, rather than a silent "anywhere in the lower half of the screen" rule with no
-/// indicator on the screen itself.
+/// A floating circular target shown while a PiP panel is being dragged. The overlay window keeps
+/// a fixed backing-store size for its entire lifetime; highlighting animates only GPU-composited
+/// layers inside that window, avoiding WindowServer resize/reblur work mid-drag.
 @MainActor
 final class CloseDropZoneOverlay {
     static let shared = CloseDropZoneOverlay()
 
     private static let diameter: CGFloat = 120
-    private static let highlightedDiameter: CGFloat = diameter * 1.15
+    private static let highlightedScale: CGFloat = 1.15
     private static let iconSize: CGFloat = 44
+    /// Transparent padding keeps the highlighted glass scale from clipping.
+    private static let canvasDiameter: CGFloat = 184
 
     private var panel: NSPanel?
-    private var containerView: NSView?
+    private var canvasView: NSView?
+    private var containerView: NSVisualEffectView?
+    private var tintView: NSView?
+    private var sheenLayer: CAGradientLayer?
     private var iconView: NSImageView?
+    private var isVisible = false
     private var isHighlighted = false
 
     private init() {}
 
-    /// Anchors the target in the vertical center of `screen`'s lower half, horizontally centered
-    /// — a fixed, predictable spot rather than following the dragged panel around.
+    /// Builds the visual-effect surface before the first drag. Creating an NSVisualEffectView and
+    /// resolving its SF Symbol on mouseDown was a visible one-frame hitch on the first use.
+    func prepare() {
+        _ = makePanelIfNeeded()
+    }
+
+    /// The logical 120pt drop target. The actual transparent overlay window is larger so its
+    /// compositor-only highlight and pulse animations have room to expand without clipping.
     static func frame(on screen: NSScreen) -> NSRect {
         let lowerHalfMidY = screen.frame.minY + screen.frame.height / 4
         return NSRect(
@@ -32,13 +42,18 @@ final class CloseDropZoneOverlay {
         )
     }
 
-    /// Whether any part of `panelFrame` overlaps the circular target on `screen` — the panel just
-    /// needs to touch the circle, not have its exact center dragged inside it, since precisely
-    /// centering a small target under a much larger panel is fiddly. Finds the point on
-    /// `panelFrame` closest to the circle's center and checks whether *that* point is within the
-    /// radius — the standard circle/rectangle intersection test, true exactly when the two shapes
-    /// overlap at all (unlike a plain bounding-box check, which would also fire near the target's
-    /// corners where the box extends past the actual circle).
+    private static func windowFrame(on screen: NSScreen) -> NSRect {
+        let target = frame(on: screen)
+        return NSRect(
+            x: target.midX - canvasDiameter / 2,
+            y: target.midY - canvasDiameter / 2,
+            width: canvasDiameter,
+            height: canvasDiameter
+        )
+    }
+
+    /// Standard circle/rectangle intersection. Keeping the comparison squared avoids a square
+    /// root on every mouseDragged event.
     static func intersects(_ panelFrame: CGRect, on screen: NSScreen) -> Bool {
         let target = frame(on: screen)
         let center = CGPoint(x: target.midX, y: target.midY)
@@ -46,72 +61,95 @@ final class CloseDropZoneOverlay {
         let closestY = max(panelFrame.minY, min(center.y, panelFrame.maxY))
         let dx = center.x - closestX
         let dy = center.y - closestY
-        return (dx * dx + dy * dy).squareRoot() <= diameter / 2
+        let radius = diameter / 2
+        return dx * dx + dy * dy <= radius * radius
     }
 
     func show(on screen: NSScreen) {
         let panel = makePanelIfNeeded()
-        // A previous drag may have left the target enlarged/red (setHighlighted) — reset to the
-        // idle circle explicitly rather than relying on state left over from last time.
-        panel.setFrame(Self.frame(on: screen), display: true)
-        applyLayout(diameter: Self.diameter)
-        containerView?.layer?.backgroundColor = NSColor.black.withAlphaComponent(0.55).cgColor
-        isHighlighted = false
+        resetVisualState()
 
+        // One non-animated position update per drag. Highlighting never changes this frame.
+        panel.setFrame(Self.windowFrame(on: screen), display: false)
         panel.alphaValue = 0
         panel.orderFrontRegardless()
+        isVisible = true
+
         NSAnimationContext.runAnimationGroup { context in
-            context.duration = 0.15
+            context.duration = 0.14
+            context.timingFunction = CAMediaTimingFunction(name: .easeOut)
             panel.animator().alphaValue = 1
         }
     }
 
     func hide() {
-        guard let panel else { return }
-        NSAnimationContext.runAnimationGroup({ context in
-            context.duration = 0.12
-            panel.animator().alphaValue = 0
-        }, completionHandler: { [weak panel] in
-            panel?.orderOut(nil)
-        })
+        guard let panel, isVisible else { return }
+        isVisible = false
+        // No disappearance animation: when a drop closes its PiP, the panel is removed first and
+        // this overlay leaves the screen in the same event turn. Directly ordering out also avoids
+        // a stale fade completion racing with the next drag's show().
+        panel.alphaValue = 0
+        panel.orderOut(nil)
+        resetVisualState()
     }
 
-    /// Bounces the target slightly larger and tints it red once the dragged panel's center is
-    /// inside it — the same "you're about to drop it here" feedback as the Dock's trash icon.
-    ///
-    /// This resizes the actual window/container/cornerRadius (via applyLayout) rather than
-    /// applying a CALayer transform scale to a fixed-size circle: a transform scale was tried
-    /// first and made the circle render as a square once scaled — resizing the real frame at a
-    /// consistently recomputed cornerRadius = diameter/2 sidesteps that entirely, since every
-    /// state (idle and highlighted) is its own genuinely round layer at its own size, never a
-    /// transformed copy of a different-sized one.
+    /// Animates just two compositor properties: the glass circle's transform and the tint's
+    /// opacity. No NSWindow frame change, visual-effect resize, mask rebuild, or view layout occurs
+    /// while the mouse is moving.
     func setHighlighted(_ highlighted: Bool) {
-        guard highlighted != isHighlighted, let panel else { return }
+        guard highlighted != isHighlighted, isVisible,
+              let containerLayer = containerView?.layer,
+              let tintLayer = tintView?.layer else { return }
         isHighlighted = highlighted
-        let diameter = highlighted ? Self.highlightedDiameter : Self.diameter
-        let center = NSPoint(x: panel.frame.midX, y: panel.frame.midY)
 
-        NSAnimationContext.runAnimationGroup { context in
-            context.duration = 0.15
-            panel.animator().setFrame(
-                NSRect(x: center.x - diameter / 2, y: center.y - diameter / 2, width: diameter, height: diameter),
-                display: true
-            )
-        }
-        applyLayout(diameter: diameter)
-        containerView?.layer?.backgroundColor = (highlighted ? NSColor.systemRed : NSColor.black.withAlphaComponent(0.55)).cgColor
+        let scale = highlighted ? Self.highlightedScale : 1
+        let currentScale = containerLayer.presentation()?.value(forKeyPath: "transform.scale")
+            ?? containerLayer.value(forKeyPath: "transform.scale")
+        let currentTintOpacity = tintLayer.presentation()?.opacity ?? tintLayer.opacity
+
+        CATransaction.begin()
+        CATransaction.setDisableActions(true)
+        containerLayer.setValue(scale, forKeyPath: "transform.scale")
+        tintLayer.opacity = highlighted ? 1 : 0
+        CATransaction.commit()
+
+        let scaleAnimation = CABasicAnimation(keyPath: "transform.scale")
+        scaleAnimation.fromValue = currentScale
+        scaleAnimation.toValue = scale
+        scaleAnimation.duration = highlighted ? 0.17 : 0.14
+        scaleAnimation.timingFunction = CAMediaTimingFunction(name: .easeOut)
+        containerLayer.add(scaleAnimation, forKey: "dropZoneHighlightScale")
+
+        let tintAnimation = CABasicAnimation(keyPath: "opacity")
+        tintAnimation.fromValue = currentTintOpacity
+        tintAnimation.toValue = highlighted ? 1 : 0
+        tintAnimation.duration = 0.13
+        tintAnimation.timingFunction = CAMediaTimingFunction(name: .easeOut)
+        tintLayer.add(tintAnimation, forKey: "dropZoneHighlightTint")
     }
 
-    /// Resizes containerView/iconView to match a `diameter`x`diameter` panel, recentering the
-    /// icon and recomputing cornerRadius so the container always renders as a perfect circle at
-    /// its current size (see setHighlighted's note on why this replaced a transform-based scale).
-    private func applyLayout(diameter: CGFloat) {
-        guard let containerView, let iconView else { return }
-        containerView.frame = NSRect(origin: .zero, size: NSSize(width: diameter, height: diameter))
-        containerView.layer?.cornerRadius = diameter / 2
-        iconView.frame = NSRect(
-            x: (diameter - Self.iconSize) / 2,
-            y: (diameter - Self.iconSize) / 2,
+    private func resetVisualState() {
+        isHighlighted = false
+        guard let containerLayer = containerView?.layer, let tintLayer = tintView?.layer else { return }
+        containerLayer.removeAllAnimations()
+        tintLayer.removeAllAnimations()
+        CATransaction.begin()
+        CATransaction.setDisableActions(true)
+        containerLayer.setValue(CGFloat(1), forKeyPath: "transform.scale")
+        tintLayer.opacity = 0
+        CATransaction.commit()
+    }
+
+    private func layoutStaticViews() {
+        guard let canvasView, let containerView, let iconView else { return }
+        let origin = (canvasView.bounds.width - Self.diameter) / 2
+        containerView.frame = CGRect(x: origin, y: origin, width: Self.diameter, height: Self.diameter)
+        containerView.layer?.cornerRadius = Self.diameter / 2
+        tintView?.frame = containerView.bounds
+        sheenLayer?.frame = containerView.bounds
+        iconView.frame = CGRect(
+            x: (Self.diameter - Self.iconSize) / 2,
+            y: (Self.diameter - Self.iconSize) / 2,
             width: Self.iconSize,
             height: Self.iconSize
         )
@@ -120,8 +158,9 @@ final class CloseDropZoneOverlay {
     private func makePanelIfNeeded() -> NSPanel {
         if let panel { return panel }
 
+        let size = NSSize(width: Self.canvasDiameter, height: Self.canvasDiameter)
         let panel = NSPanel(
-            contentRect: NSRect(origin: .zero, size: NSSize(width: Self.diameter, height: Self.diameter)),
+            contentRect: NSRect(origin: .zero, size: size),
             styleMask: [.borderless, .nonactivatingPanel],
             backing: .buffered,
             defer: false
@@ -130,13 +169,36 @@ final class CloseDropZoneOverlay {
         panel.backgroundColor = .clear
         panel.hasShadow = false
         panel.level = .screenSaver
-        panel.ignoresMouseEvents = true // purely a visual target — never intercepts the drag itself
+        panel.ignoresMouseEvents = true
         panel.collectionBehavior = [.canJoinAllSpaces, .fullScreenAuxiliary, .stationary, .ignoresCycle]
 
-        let container = NSView(frame: NSRect(origin: .zero, size: panel.frame.size))
+        let canvas = NSView(frame: NSRect(origin: .zero, size: size))
+        canvas.wantsLayer = true
+
+        let container = NSVisualEffectView()
+        container.material = .hudWindow
+        container.blendingMode = .behindWindow
+        container.state = .active
         container.wantsLayer = true
-        container.layer?.backgroundColor = NSColor.black.withAlphaComponent(0.55).cgColor
         container.layer?.masksToBounds = true
+        container.layer?.borderWidth = 1
+        container.layer?.borderColor = NSColor.white.withAlphaComponent(0.5).cgColor
+        canvas.addSubview(container)
+
+        let sheen = CAGradientLayer()
+        sheen.colors = [
+            NSColor.white.withAlphaComponent(0.4).cgColor,
+            NSColor.white.withAlphaComponent(0).cgColor,
+        ]
+        sheen.startPoint = CGPoint(x: 0.15, y: 0.95)
+        sheen.endPoint = CGPoint(x: 0.7, y: 0.35)
+        container.layer?.addSublayer(sheen)
+
+        let tint = NSView()
+        tint.wantsLayer = true
+        tint.layer?.backgroundColor = NSColor.systemRed.withAlphaComponent(0.72).cgColor
+        tint.layer?.opacity = 0
+        container.addSubview(tint)
 
         let icon = NSImageView()
         icon.image = NSImage(systemSymbolName: "xmark.circle.fill", accessibilityDescription: nil)
@@ -144,11 +206,14 @@ final class CloseDropZoneOverlay {
         icon.contentTintColor = .white
         container.addSubview(icon)
 
-        panel.contentView = container
+        panel.contentView = canvas
         self.panel = panel
-        self.containerView = container
-        self.iconView = icon
-        applyLayout(diameter: Self.diameter)
+        canvasView = canvas
+        containerView = container
+        tintView = tint
+        sheenLayer = sheen
+        iconView = icon
+        layoutStaticViews()
         return panel
     }
 }

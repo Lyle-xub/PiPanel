@@ -27,6 +27,17 @@ final class InteractionForwarder {
 
     var autoReturnEnabled = false
     var autoReturnIdleInterval: TimeInterval = 1.5
+    /// Fires (main actor) every time capture actually ends, however it ends — crossing back out
+    /// through the mirrored window's edge, or Option appearing mid-capture. PiPPanelController
+    /// uses this to reset PiPVideoLayerView's control-mode gate back to "move mode" (see that
+    /// type's own doc comment) each time, rather than hasEnteredControlMode staying permanently
+    /// latched after the first double-click for the rest of the session — the first version of
+    /// that gate did exactly that, and it meant Option was needed to move the panel forever after
+    /// one double-click, since a plain hover always re-captures once hasEnteredControlMode is
+    /// true, and hovering unavoidably happens before a plain mouseDown ever could. Resetting here
+    /// means the panel goes back to being freely draggable the moment you're done controlling the
+    /// source, and only needs another double-click to hand control back to it again.
+    var onCaptureEnded: (() -> Void)?
 
     private var previousFrontmostApp: NSRunningApplication?
     private var idleReturnTimer: Timer?
@@ -120,6 +131,7 @@ final class InteractionForwarder {
         isCaptured = false
         removeCaptureMonitors()
         videoView?.hideCapturedCursorIndicator()
+        onCaptureEnded?()
     }
 
     /// Maps the fractional position where the pointer crossed the mirrored window's edge back to
@@ -130,6 +142,7 @@ final class InteractionForwarder {
     private func endCapture(exitFracX: CGFloat, exitFracYFromTop: CGFloat) {
         isCaptured = false
         removeCaptureMonitors()
+        onCaptureEnded?()
 
         guard let videoView, let panel else { return }
         videoView.hideCapturedCursorIndicator()

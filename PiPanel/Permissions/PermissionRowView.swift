@@ -10,6 +10,12 @@ struct PermissionRow: View {
     let icon: String
     let title: String
     let action: () -> Void
+    /// True (the default) draws this row's own rounded background — needed for
+    /// MenuBarRootView's PermissionsBannerView, which is a floating popover with no other
+    /// grouping of its own. PermissionsSettingsView passes false: it places this row inside a
+    /// Form/Section instead, which already supplies the grouped-row background, so drawing a
+    /// second one here would double up and look like a box nested inside a box.
+    var showsBackground: Bool = true
 
     var body: some View {
         HStack(spacing: 10) {
@@ -29,7 +35,34 @@ struct PermissionRow: View {
             }
         }
         .padding(.vertical, 6)
+        .padding(.horizontal, showsBackground ? 10 : 0)
+        .background {
+            if showsBackground {
+                RoundedRectangle(cornerRadius: 8, style: .continuous).fill(.quaternary.opacity(0.5))
+            }
+        }
+    }
+}
+
+/// Screen Recording grants made after launch don't take effect for the running process — shown
+/// next to that row once a grant has been requested but still isn't visible to this process.
+struct RelaunchHintView: View {
+    @EnvironmentObject private var permissionsManager: PermissionsManager
+
+    var body: some View {
+        HStack(spacing: 10) {
+            Image(systemName: "arrow.clockwise.circle")
+                .font(.system(size: 13))
+                .foregroundStyle(.secondary)
+                .frame(width: 18)
+            Text("已授权的话，需要重启 PiPanel 才能生效")
+                .font(.system(size: 11))
+                .foregroundStyle(.secondary)
+            Spacer()
+            Button("重启", action: permissionsManager.relaunch)
+                .buttonStyle(PillButtonStyle())
+        }
+        .padding(.vertical, 4)
         .padding(.horizontal, 10)
-        .background(RoundedRectangle(cornerRadius: 8, style: .continuous).fill(.quaternary.opacity(0.5)))
     }
 }

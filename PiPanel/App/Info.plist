@@ -19,7 +19,18 @@
 	<key>CFBundlePackageType</key>
 	<string>APPL</string>
 	<key>CFBundleShortVersionString</key>
-	<string>0.1.0</string>
+	<string>1.0.0</string>
+	<key>CFBundleURLTypes</key>
+	<array>
+		<dict>
+			<key>CFBundleURLName</key>
+			<string>com.pipanel.mac.recovery</string>
+			<key>CFBundleURLSchemes</key>
+			<array>
+				<string>pipanel</string>
+			</array>
+		</dict>
+	</array>
 	<key>CFBundleVersion</key>
 	<string>1</string>
 	<key>LSApplicationCategoryType</key>
@@ -34,5 +45,19 @@
 	<string>Copyright © 2026. All rights reserved.</string>
 	<key>NSPrincipalClass</key>
 	<string>NSApplication</string>
+	<key>SUAllowsAutomaticUpdates</key>
+	<true/>
+	<key>SUAutomaticallyUpdate</key>
+	<true/>
+	<key>SUEnableAutomaticChecks</key>
+	<true/>
+	<key>SUFeedURL</key>
+	<string>https://pipanel.app/appcast.xml</string>
+	<key>SUPublicEDKey</key>
+	<string>+YbQeYLoJCDoNKhe6Jv4NxA87tcPOKrAO4O4dGO7RjQ=</string>
+	<key>SUScheduledCheckInterval</key>
+	<integer>86400</integer>
+	<key>SUVerifyUpdateBeforeExtraction</key>
+	<true/>
 </dict>
 </plist>

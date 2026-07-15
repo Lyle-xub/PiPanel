@@ -1,9 +1,68 @@
 import AppKit
 import ApplicationServices
 
+struct FlingCandidateSnapshot {
+    let title: String
+    let frame: CGRect
+}
+
+enum FlingCandidateMatcher {
+    /// ScreenCaptureKit can trail the live AX position by several hundred points immediately after
+    /// a fast drag. Prefer the stable app/window identity (PID is filtered by the caller, then
+    /// title here), using geometry only when the title is unavailable or ambiguous.
+    static func matchingIndex(
+        candidates: [FlingCandidateSnapshot],
+        axTitle: String?,
+        liveFrame: CGRect
+    ) -> Int? {
+        guard !candidates.isEmpty else { return nil }
+
+        if let axTitle, !axTitle.isEmpty {
+            let titleMatches = candidates.indices.filter {
+                titlesLikelyMatch(candidates[$0].title, axTitle)
+            }
+            if titleMatches.count == 1 {
+                return titleMatches[0]
+            }
+            if let closestTitleMatch = titleMatches.min(by: {
+                distance(candidates[$0].frame, liveFrame) < distance(candidates[$1].frame, liveFrame)
+            }), distance(candidates[closestTitleMatch].frame, liveFrame) < 240 {
+                return closestTitleMatch
+            }
+        }
+
+        if let closest = candidates.indices.min(by: {
+            distance(candidates[$0].frame, liveFrame) < distance(candidates[$1].frame, liveFrame)
+        }), distance(candidates[closest].frame, liveFrame) < 240 {
+            return closest
+        }
+
+        // A single eligible layer-zero window for this PID is unambiguous even if SC has not yet
+        // published its post-shake position. This is the common Bilibili/Electron case.
+        return candidates.count == 1 ? 0 : nil
+    }
+
+    static func titlesLikelyMatch(_ lhs: String, _ rhs: String) -> Bool {
+        let lhs = lhs.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
+        let rhs = rhs.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
+        guard !lhs.isEmpty, !rhs.isEmpty else { return false }
+        if lhs == rhs { return true }
+        let shorter = lhs.count <= rhs.count ? lhs : rhs
+        let longer = lhs.count <= rhs.count ? rhs : lhs
+        return shorter.count >= 3 && longer.contains(shorter)
+    }
+
+    static func distance(_ a: CGRect, _ b: CGRect) -> CGFloat {
+        abs(a.origin.x - b.origin.x)
+            + abs(a.origin.y - b.origin.y)
+            + abs(a.width - b.width)
+            + abs(a.height - b.height)
+    }
+}
+
 /// Detects "shake a window into PiP" gestures system-wide: grabbing a window anywhere and shaking
-/// it back and forth converts that window into a PiP session — an alternative to the menu-bar
-/// picker for a window you're already looking at, without having to break flow to open the menu.
+/// it back and forth converts that window into a PiP session — the permanently-licensed
+/// alternative to WindowCornerPiPController's free/default top-left hover switch.
 /// There's no modifier-key gate and no requirement to grab a specific part of the window — any
 /// drag that reverses direction with enough accumulated motion is the whole gesture. A plain
 /// single-direction pan (drag one way and let go, however fast) deliberately does NOT qualify —
@@ -80,13 +139,17 @@ final class WindowFlingDetector {
 
     private func handleMouseDown(_ event: NSEvent) {
         tracking = nil
-        guard AXIsProcessTrusted() else { return }
+        guard AXIsProcessTrusted() else {
+            debugTrace("fling: rejected mouseDown because Accessibility is not trusted")
+            return
+        }
 
-        let quartzPoint = Self.quartzPoint(from: event.locationInWindow)
+        let quartzPoint = Self.quartzPoint(from: Self.appKitScreenPoint(from: event))
         let systemWide = AXUIElementCreateSystemWide()
         var elementRef: AXUIElement?
         guard AXUIElementCopyElementAtPosition(systemWide, Float(quartzPoint.x), Float(quartzPoint.y), &elementRef) == .success,
               let element = elementRef else {
+            debugTrace("fling: AX hit-test failed point=\(quartzPoint)")
             return
         }
         // Any mouseDown that resolves to some app's window starts tracking, regardless of where
@@ -97,6 +160,7 @@ final class WindowFlingDetector {
         // the speed threshold unless the window is actually being thrown around.
         guard let axWindow = Self.enclosingWindow(of: element) else {
             PiPanelLogger.interaction.debug("Fling: mouseDown hit element has no enclosing AXWindow")
+            debugTrace("fling: hit element has no enclosing AXWindow role=\(Self.role(of: element) ?? "nil") point=\(quartzPoint)")
             return
         }
 
@@ -105,11 +169,12 @@ final class WindowFlingDetector {
 
         tracking = Tracking(axWindow: axWindow, pid: pid, samples: [(quartzPoint, event.timestamp)])
         PiPanelLogger.interaction.debug("Fling: tracking started for pid \(pid)")
+        debugTrace("fling: tracking started pid=\(pid) title=\(AXWindowLocator.title(of: axWindow) ?? "nil") frame=\(AXWindowLocator.frame(of: axWindow) ?? .zero)")
     }
 
     private func handleMouseDragged(_ event: NSEvent) {
         guard tracking != nil else { return }
-        let point = Self.quartzPoint(from: event.locationInWindow)
+        let point = Self.quartzPoint(from: Self.appKitScreenPoint(from: event))
         tracking?.samples.append((point, event.timestamp))
         if let newest = tracking?.samples.last?.time {
             tracking?.samples.removeAll { newest - $0.time > Self.velocitySampleWindow }
@@ -120,7 +185,7 @@ final class WindowFlingDetector {
         defer { tracking = nil }
         guard let tracking, let oldest = tracking.samples.first else { return }
 
-        let point = Self.quartzPoint(from: event.locationInWindow)
+        let point = Self.quartzPoint(from: Self.appKitScreenPoint(from: event))
         let dt = event.timestamp - oldest.time
         guard dt > 0.01 else { return } // avoid an inflated estimate from a near-zero time delta
 
@@ -141,6 +206,7 @@ final class WindowFlingDetector {
         let speed = totalDistance / dt
         let reversals = Self.reversalCount(in: path)
         PiPanelLogger.interaction.debug("Fling: accumulated speed \(speed, format: .fixed(precision: 0)) pt/s (threshold \(Self.flingVelocityThreshold, format: .fixed(precision: 0))), \(reversals) reversal(s) (need \(Self.minReversals))")
+        debugTrace("fling: gesture speed=\(speed) reversals=\(reversals) samples=\(path.count)")
         guard speed >= Self.flingVelocityThreshold, reversals >= Self.minReversals else { return }
 
         let axWindow = tracking.axWindow
@@ -152,22 +218,39 @@ final class WindowFlingDetector {
 
     /// There's no public API mapping an AXUIElement to a CGWindowID (the same gap
     /// AXWindowLocator works around in the other direction), so the flung window is matched back
-    /// to a WindowInfo by owning pid + current frame proximity.
+    /// to a WindowInfo by owning PID, AX title, then live-frame proximity as a fallback.
     private func attemptStartSession(axWindow: AXUIElement, pid: pid_t) async {
-        guard let quartzFrame = AXWindowLocator.frame(of: axWindow) else { return }
-        guard let candidates = try? await WindowEnumerator.listPiPCandidateWindows() else {
-            PiPanelLogger.interaction.debug("Fling: WindowEnumerator lookup failed (screen recording permission?)")
+        guard let quartzFrame = AXWindowLocator.frame(of: axWindow) else {
+            debugTrace("fling: rejected pid=\(pid) because live AX frame is unavailable")
             return
         }
-        let match = candidates
-            .filter { $0.ownerPID == pid }
-            .min { Self.distance($0.frame, quartzFrame) < Self.distance($1.frame, quartzFrame) }
-        guard let windowInfo = match, Self.distance(windowInfo.frame, quartzFrame) < 60 else {
+        guard let candidates = try? await WindowEnumerator.listPiPCandidateWindows() else {
+            PiPanelLogger.interaction.debug("Fling: WindowEnumerator lookup failed (screen recording permission?)")
+            debugTrace("fling: WindowEnumerator lookup failed pid=\(pid)")
+            return
+        }
+        let pidCandidates = candidates.filter { $0.ownerPID == pid }
+        let snapshots = pidCandidates.map { FlingCandidateSnapshot(title: $0.title, frame: $0.frame) }
+        let axTitle = AXWindowLocator.title(of: axWindow)
+        guard let matchIndex = FlingCandidateMatcher.matchingIndex(
+            candidates: snapshots,
+            axTitle: axTitle,
+            liveFrame: quartzFrame
+        ) else {
             PiPanelLogger.interaction.debug("Fling: no WindowInfo matched pid \(pid) within tolerance")
+            debugTrace("fling: no candidate matched pid=\(pid) axTitle=\(axTitle ?? "nil") liveFrame=\(quartzFrame) candidates=\(snapshots.map { "\($0.title):\($0.frame)" })")
             return
         }
 
+        var windowInfo = pidCandidates[matchIndex]
+        let staleDistance = FlingCandidateMatcher.distance(windowInfo.frame, quartzFrame)
+        // The AX frame is read after the drag ended and is therefore authoritative for both the
+        // source move and the monitor on which the PiP should appear. Passing SC's possibly stale
+        // pre-shake frame was also why a secondary-screen shake opened the panel on the main one.
+        windowInfo.frame = quartzFrame
+
         PiPanelLogger.interaction.debug("Fling: starting PiP session for \(windowInfo.title)")
+        debugTrace("fling: matched title=\(windowInfo.title) pid=\(pid) staleDistance=\(staleDistance) liveFrame=\(quartzFrame)")
         onFling?(windowInfo)
     }
 
@@ -192,10 +275,6 @@ final class WindowFlingDetector {
         return reversals
     }
 
-    private static func distance(_ a: CGRect, _ b: CGRect) -> CGFloat {
-        abs(a.origin.x - b.origin.x) + abs(a.origin.y - b.origin.y) + abs(a.width - b.width) + abs(a.height - b.height)
-    }
-
     /// AXUIElementCopyElementAtPosition and window frames (AXWindowLocator, WindowInfo.frame) all
     /// use top-left-origin Quartz space; NSEvent.locationInWindow (screen coords, for a global-
     /// monitor event with no real window)/NSScreen.frame use bottom-left-origin AppKit space.
@@ -204,7 +283,19 @@ final class WindowFlingDetector {
     /// origin is .zero and which sits at Quartz global (0,0) at its top-left.
     private static func quartzPoint(from appKitPoint: NSPoint) -> CGPoint {
         let primaryHeight = NSScreen.screens.first?.frame.height ?? 0
-        return CGPoint(x: appKitPoint.x, y: primaryHeight - appKitPoint.y)
+        return CoordinateTranslator.quartzPoint(
+            fromAppKitPoint: appKitPoint,
+            primaryScreenHeight: primaryHeight
+        )
+    }
+
+    /// Preserve the position attached to each historical drag event rather than sampling the
+    /// cursor's latest position repeatedly (queued events could otherwise collapse to one point).
+    /// Global-monitor events normally have no NSWindow and already report screen coordinates; the
+    /// conversion also handles the defensive case where AppKit supplies a window-relative event.
+    private static func appKitScreenPoint(from event: NSEvent) -> CGPoint {
+        guard let window = event.window else { return event.locationInWindow }
+        return window.convertPoint(toScreen: event.locationInWindow)
     }
 
     private static func role(of element: AXUIElement) -> String? {
@@ -213,7 +304,16 @@ final class WindowFlingDetector {
         return role as? String
     }
 
-    private static func enclosingWindow(of element: AXUIElement, maxDepth: Int = 8) -> AXUIElement? {
+    private static func enclosingWindow(of element: AXUIElement, maxDepth: Int = 32) -> AXUIElement? {
+        // Electron apps such as Bilibili expose deeply nested custom title-bar/web-content
+        // elements. AXWindow/AXTopLevelUIElement jump directly to the owning window when those
+        // attributes are available, avoiding an arbitrary parent-depth dependency.
+        for attribute in [kAXWindowAttribute, kAXTopLevelUIElementAttribute] {
+            if let candidate = elementAttribute(element, attribute), role(of: candidate) == kAXWindowRole {
+                return candidate
+            }
+        }
+
         var current = element
         for _ in 0..<maxDepth {
             if role(of: current) == kAXWindowRole {
@@ -225,5 +325,12 @@ final class WindowFlingDetector {
             current = (parent as! AXUIElement)
         }
         return nil
+    }
+
+    private static func elementAttribute(_ element: AXUIElement, _ attribute: String) -> AXUIElement? {
+        var value: CFTypeRef?
+        guard AXUIElementCopyAttributeValue(element, attribute as CFString, &value) == .success,
+              let value, CFGetTypeID(value) == AXUIElementGetTypeID() else { return nil }
+        return (value as! AXUIElement)
     }
 }

@@ -11,6 +11,23 @@ import CoreGraphics
 /// the captured window appears at the high-Y end of the view — so mapping to the image's
 /// top-down fraction requires flipping Y once, then everything downstream stays in Quartz space.
 enum CoordinateTranslator {
+    /// Converts a Quartz/AX global frame (top-left origin, Y grows downward) into AppKit's global
+    /// screen space (bottom-left origin, Y grows upward). The primary/menu-bar display is the
+    /// shared pivot for the whole multi-display desktop, including displays arranged above or
+    /// below it.
+    static func appKitFrame(fromQuartzFrame frame: CGRect, primaryScreenHeight: CGFloat) -> CGRect {
+        CGRect(
+            x: frame.minX,
+            y: primaryScreenHeight - frame.maxY,
+            width: frame.width,
+            height: frame.height
+        )
+    }
+
+    static func quartzPoint(fromAppKitPoint point: CGPoint, primaryScreenHeight: CGFloat) -> CGPoint {
+        CGPoint(x: point.x, y: primaryScreenHeight - point.y)
+    }
+
     /// - Parameters:
     ///   - localPoint: click location in the video view's own bounds (AppKit space).
     ///   - viewBounds: the video view's bounds.

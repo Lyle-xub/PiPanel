@@ -8,3 +8,7 @@ build/
 .swiftpm/
 *.o
 *.dia
+node_modules/
+dist/
+.wrangler/
+.dev.vars

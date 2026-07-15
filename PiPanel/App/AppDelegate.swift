@@ -2,19 +2,40 @@ import AppKit
 
 final class AppDelegate: NSObject, NSApplicationDelegate {
     func applicationDidFinishLaunching(_ notification: Notification) {
+        #if DEBUG
         debugTrace("applicationDidFinishLaunching START")
+        #endif
         NSApp.setActivationPolicy(.accessory)
         PiPanelLogger.app.info("PiPanel launched")
+        #if DEBUG
         debugTrace("applicationDidFinishLaunching: policy set, calling debugAutostartIfRequested")
         debugAutostartIfRequested()
+        #endif
 
         Task { @MainActor in
+            // Retain Sparkle's controller for the application lifetime. Its own scheduler performs
+            // the automatic daily checks configured in Info.plist and installs signed updates in
+            // the background when possible.
+            _ = UpdateManager.shared
+
+            // Build the private-display pool once at launch. Unit tests embed/launch the app too;
+            // never mutate the developer machine's real display topology for a test host.
+            if ProcessInfo.processInfo.environment["XCTestConfigurationFilePath"] == nil {
+                await VirtualDisplayPool.shared.warmUp(
+                    longEdge: CGFloat(SettingsStore.shared.virtualDisplayLongEdge)
+                )
+            }
+
+            // Creating the drop-zone's glass surface and resolving its symbol during the first
+            // mouseDown causes a visible hitch. Prepare it after launch, before any drag begins.
+            CloseDropZoneOverlay.shared.prepare()
             if !SettingsStore.shared.hasCompletedWelcome {
                 WelcomeWindowController.shared.show()
             }
         }
     }
 
+    #if DEBUG
     /// Dev-only hook: set PIPANEL_DEBUG_AUTOSTART=<comma-separated app name substrings> to
     /// auto-start a PiP session per match without going through the picker UI — used for
     /// milestone verification, including starting multiple sessions at once (M4). No-ops unless
@@ -42,8 +63,24 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             }
         }
     }
+    #endif
 
     func applicationShouldTerminateAfterLastWindowClosed(_ sender: NSApplication) -> Bool {
         false
+    }
+
+    /// Handles the "pipanel://recover?token=..." deep link from the one-time recovery email
+    /// (see LicenseServerClient/MembershipManager) — macOS routes CFBundleURLSchemes launches
+    /// here via the URL Types entry in Info.plist.
+    func application(_ application: NSApplication, open urls: [URL]) {
+        for url in urls {
+            guard url.scheme == "pipanel", url.host == "recover" else { continue }
+            guard let token = URLComponents(url: url, resolvingAgainstBaseURL: false)?
+                .queryItems?.first(where: { $0.name == "token" })?.value else { continue }
+            Task { @MainActor in
+                await MembershipManager.shared.handleRecoveryDeepLink(token: token)
+                SettingsWindowController.shared.show()
+            }
+        }
     }
 }

@@ -28,6 +28,12 @@ struct WindowPickerView: View {
                 .buttonStyle(SubtleIconButtonStyle())
             }
 
+            if let limitMessage = sessionManager.membershipLimitMessage {
+                Text(limitMessage)
+                    .font(.system(size: 11))
+                    .foregroundStyle(.orange)
+            }
+
             if isLoading {
                 ProgressView()
                     .frame(maxWidth: .infinity)

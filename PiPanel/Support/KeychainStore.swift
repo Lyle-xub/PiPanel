@@ -1,10 +1,9 @@
 import Foundation
 import Security
 
-/// Minimal generic-password Keychain wrapper — used to store the membership license key and its
-/// Creem instance ID. Keychain rather than UserDefaults (which every other setting in this app
-/// uses) specifically because this is credential-like data with real monetary value attached,
-/// not a plain local preference.
+/// Minimal generic-password Keychain wrapper for license state and the stable trial installation
+/// id. Keychain normally survives app deletion, which makes the server's one-trial-per-id record
+/// more resistant to casual reinstall resets than UserDefaults.
 enum KeychainStore {
     private static let service = "com.pipanel.mac.membership"
 

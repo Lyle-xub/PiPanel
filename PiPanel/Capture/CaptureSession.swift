@@ -14,8 +14,9 @@ enum CaptureSessionError: Error {
     case virtualDisplayNotVisibleToScreenCaptureKit
 }
 
-/// Owns one PiP capture session: creates a private virtual display, relocates the source
-/// window onto it via Accessibility, and streams that display via ScreenCaptureKit.
+/// Owns one PiP capture session: leases a private virtual display from VirtualDisplayPool,
+/// relocates the source window onto it via Accessibility, and streams that display via
+/// ScreenCaptureKit. The display normally outlives this session and is returned to the pool.
 ///
 /// Why a virtual display instead of capturing the window in place: SCContentFilter's two
 /// window-scoped filter types were both verified (Spikes/CaptureSpike) to break for this
@@ -47,6 +48,7 @@ final class CaptureSession: NSObject {
     /// physical screen where the user can actually see/use it (M3) — there's nothing useful to
     /// mirror while that's true, so the panel hides itself.
     enum PresentationState {
+        case starting
         case pip
         case sourceActive
     }
@@ -58,7 +60,7 @@ final class CaptureSession: NSObject {
     private(set) var originalFrame: CGRect?
     private(set) var axWindow: AXUIElement?
     private(set) var framedRect: CGRect = .zero
-    private(set) var presentationState: PresentationState = .pip
+    private(set) var presentationState: PresentationState = .starting
     /// The size the window should be placed at on the virtual display — starts equal to
     /// originalFrame.size but diverges once resizeSourceWindow (PiP-panel edge-drag resize) is
     /// used. Deliberately kept separate from originalFrame: enterPiPState/
@@ -97,6 +99,60 @@ final class CaptureSession: NSObject {
     /// for the panel growing past what the source will follow rather than shrinking below it. An
     /// axis not yet discovered is reported as .infinity (never fails a "size > ceiling" comparison).
     var onSourceMaxSizeDiscovered: ((CGSize) -> Void)?
+    /// Holds a floor/ceiling candidate for one axis that looked like "the source refused to go
+    /// further" on its *most recent* commit, but hasn't yet been confirmed by enough independent
+    /// samples — see commitSourceWindowSize's doc comment for why a single sample isn't trustworthy
+    /// enough to commit to discoveredMin/MaxWidth/Height directly. Cleared back to nil the moment a
+    /// commit shows real progress on that axis instead, so a merely-slow app never accumulates a
+    /// false confirmation across unrelated ticks.
+    private var suspectedMinWidth: CGFloat?
+    private var suspectedMinHeight: CGFloat?
+    private var suspectedMaxWidth: CGFloat?
+    private var suspectedMaxHeight: CGFloat?
+    /// How many consecutive commits have to report the exact same suspected value on a given axis
+    /// before commitSourceWindowSize actually commits to discoveredMin/MaxWidth/Height — paired
+    /// 1:1 with suspectedMin/MaxWidth/Height above (reset to 0 wherever those are reset to nil).
+    /// Confirmed via /tmp/pipanel_trace.log against a real regression: 2 samples (the previous
+    /// threshold) turned out not to be a strong enough signal at this app's own resize cadence —
+    /// a terminal genuinely still catching up from a large jump (real growth 1105→1210→1238 pt
+    /// across three commits) then happened to read the *same* 1238 on the very next two commits,
+    /// only ~80-160ms apart, purely because it hadn't finished settling yet — not because it had
+    /// actually hit a hard limit. That got "CONFIRMED" as a permanent ceiling almost instantly,
+    /// after which nothing about this app's own careful re-test-nothing-once-discovered design (see
+    /// commitSourceWindowSize's own doc comment) ever revisits it, so every later drag stayed
+    /// wrongly pinned there for the rest of the session regardless of how far the panel kept
+    /// growing. 3 total consistent samples is a meaningfully stronger signal a genuinely-capped app
+    /// still clears easily (identical actual size call after call), while giving a slow-but-uncapped
+    /// app one more ~80-150ms tick to show visible progress and clear the suspicion first.
+    private static let boundConfirmationStreak = 3
+    private var suspectedMinWidthStreak = 0
+    private var suspectedMinHeightStreak = 0
+    private var suspectedMaxWidthStreak = 0
+    private var suspectedMaxHeightStreak = 0
+    /// The target size actually sent to the previous commitSourceWindowSize call — distinct from
+    /// framedRect.size (the previous *actual*, already read as previousActual below). Needed
+    /// because a discovered-bound streak isn't valid evidence unless each sample represents a
+    /// genuinely *new, escalated* ask, not the same request repeated. That repeat case is common
+    /// and easy to trigger: once resizeSourceWindow's panel-space input pins at panel.minSize (or
+    /// panel.maxSize) on one axis while the user keeps jiggling the mouse on the other, the scaled
+    /// sourceTargetSize on the pinned axis becomes a *constant* value tick after tick even though
+    /// nothing new is being tested. Confirmed via /tmp/pipanel_trace.log against a real regression:
+    /// a panel dragged down to its 160pt minWidth, combined with a ~3.24x panelToSourceScale,
+    /// repeatedly asked for the identical ~519.27pt source width; the app's own pixel/character-
+    /// grid rounding snapped that to a fixed 517pt every single time, and 3 identical "actual"
+    /// readings in a row (of a target that itself never changed) satisfied boundConfirmationStreak
+    /// and got wrongly locked in as a permanent ceiling — even though the app was never actually
+    /// asked to grow any further than that one static value.
+    private var previousTargetSize: CGSize = .zero
+
+    /// The ratio between the source window's own point-space and the PiP panel's — a single,
+    /// uniform scalar (not independent per axis), established from the very first PiP-panel
+    /// resize request of the session and held fixed afterward. See resizeSourceWindow's doc
+    /// comment for why this exists and why it's one shared number rather than separate
+    /// width/height factors; PiPPanelController.updateContentScalingMode reads it too, to compare
+    /// the panel's size against discoveredSourceMinSize/MaxSize (both in source-space) on the same
+    /// footing.
+    private(set) var panelToSourceScale: CGFloat?
 
     /// Set by InteractionForwarder right before it activates the source app just to deliver a
     /// forwarded click/keystroke — PiPSessionManager consumes (and clears) this to tell that
@@ -115,8 +171,105 @@ final class CaptureSession: NSObject {
     /// See observeScreenParameterChanges/reanchorAfterDisplayReconfiguration.
     private var screenParamsObserver: NSObjectProtocol?
     private var isReanchoring = false
+    /// Invalidates an ordinary notification-queued re-anchor when a sibling startup has already
+    /// corrected this session synchronously while holding the topology lock. Without a generation
+    /// token the stale queued task would run again after startup and could act on a later layout.
+    private var reanchorTaskGeneration = 0
+    /// Set before stop() waits for the topology coordinator. A queued re-anchor captures its host
+    /// strongly, so checking only `virtualDisplayHost != nil` before queuing is insufficient: stop
+    /// may tear that display down while the re-anchor is waiting, after which the stale task would
+    /// otherwise move the source window back toward a display that no longer exists.
+    private var isStopping = false
 
     var targetFPS: Int = 15 {
+        didSet { Task { try? await applyConfiguration() } }
+    }
+    /// Refresh ceiling of the physical display that contained the source window when PiP was
+    /// created. The global setting may follow a faster monitor, but a session that came from a
+    /// 60 Hz screen should not ask ScreenCaptureKit for frames that display cannot produce.
+    var sourceDisplayMaximumFPS: Int = DisplayRefreshRate.fallbackFPS {
+        didSet { Task { try? await applyConfiguration() } }
+    }
+
+    private var effectiveTargetFPS: Int {
+        Self.effectiveFrameRate(requested: targetFPS, displayMaximum: sourceDisplayMaximumFPS)
+    }
+
+    static func effectiveFrameRate(requested: Int, displayMaximum: Int) -> Int {
+        min(max(requested, 1), max(displayMaximum, 1))
+    }
+    /// The private virtual display's pixel long edge. Before start() runs (virtualDisplayHost ==
+    /// nil), setting this just records the size start() will create the display at — set once by
+    /// PiPSessionManager right after construction, same as targetFPS. Once a session is live, a
+    /// change instead live-resizes the *existing* VirtualDisplayHost via
+    /// VirtualDisplayHost.resize(pixelWidth:pixelHeight:) — confirmed working in
+    /// Spikes/VirtualDisplayResizeSpike even against a display an SCStream is already actively
+    /// capturing (see that method's own doc comment for why an earlier attempt at this looked
+    /// broken and wasn't).
+    var virtualDisplayLongEdge: CGFloat = CGFloat(VirtualDisplayHost.maxPixelsWide) {
+        didSet {
+            guard virtualDisplayHost != nil, oldValue != virtualDisplayLongEdge else { return }
+            // Depth-1 coalescing queue, same pattern and same reason as resizeSourceWindow's own:
+            // a slider drag fires this every tick, each a real IPC round-trip to the window
+            // server, so this always chases the latest requested value instead of piling up a
+            // backlog of stale in-flight resizes.
+            pendingVirtualDisplayLongEdge = virtualDisplayLongEdge
+            guard !isResizingVirtualDisplay else { return }
+            isResizingVirtualDisplay = true
+            Task {
+                while let longEdge = pendingVirtualDisplayLongEdge {
+                    pendingVirtualDisplayLongEdge = nil
+                    await applyVirtualDisplayResize(longEdge: longEdge)
+                }
+                isResizingVirtualDisplay = false
+            }
+        }
+    }
+    private var isResizingVirtualDisplay = false
+    private var pendingVirtualDisplayLongEdge: CGFloat?
+    /// Fires (on the main actor) once the initial virtual display is ready and after any live
+    /// virtualDisplayLongEdge resize succeeds — PiPPanelController uses this to refresh
+    /// panel.maxSize from the real coordinate-space deliverableMaxSize. Distinct from
+    /// onSourceMinSizeDiscovered/onSourceMaxSizeDiscovered:
+    /// those only ever *tighten* panel.maxSize (an app-imposed bound can't un-discover itself),
+    /// but this is the one case where the ceiling can legitimately go back up.
+    var onDeliverableSizeChanged: (() -> Void)?
+
+    private func applyVirtualDisplayResize(longEdge: CGFloat) async {
+        guard let host = virtualDisplayHost else { return }
+        // Applying a new CGVirtualDisplay mode is a process-wide topology mutation, just like
+        // creating/destroying a host. Serialize it with startup, teardown and re-anchoring so an
+        // old session can never read the half-reflowed desktop produced between apply(_:) and the
+        // window server's final arrangement notification.
+        await VirtualDisplayCoordinator.shared.lock()
+        guard !isStopping, virtualDisplayHost === host else {
+            await VirtualDisplayCoordinator.shared.unlock()
+            return
+        }
+        let pixelSize = VirtualDisplayHost.pixelSize(forLongEdge: longEdge)
+        let resized = await MainActor.run { host.resize(pixelWidth: pixelSize.width, pixelHeight: pixelSize.height) }
+        guard resized else {
+            await VirtualDisplayCoordinator.shared.unlock()
+            debugTrace("vdisplay: live resize FAILED requestedLongEdge=\(longEdge) pixelSize=(\(pixelSize.width), \(pixelSize.height))")
+            return
+        }
+        debugTrace("vdisplay: live resize applied requestedLongEdge=\(longEdge) pixelSize=(\(pixelSize.width), \(pixelSize.height)) coordinateBounds=\(host.bounds)")
+
+        // The mode changed underneath the running SCStream. Updating only VirtualDisplayHost's
+        // bookkeeping changes later clamp calculations, but leaves the stream configured against
+        // the old display/crop dimensions until some unrelated panel resize happens. Refresh it
+        // immediately so the setting has an observable effect even while the panel is idle.
+        try? await applyConfiguration()
+        await VirtualDisplayCoordinator.shared.unlock()
+
+        let reportChange = onDeliverableSizeChanged
+        await MainActor.run { reportChange?() }
+    }
+
+    /// SCStreamConfiguration's output pixel long edge (makeConfiguration's maxLongEdge) — unlike
+    /// virtualDisplayLongEdge above, this is just a stream config field, so it applies live to an
+    /// already-running session the same way targetFPS does.
+    var maxOutputLongEdge: CGFloat = 1280 {
         didSet { Task { try? await applyConfiguration() } }
     }
 
@@ -139,7 +292,7 @@ final class CaptureSession: NSObject {
     /// actually deliver — see panel.maxSize's doc comment for why that matters.
     static let edgeMargin: CGFloat = 40
 
-    func start() async throws {
+    func start(reanchoring siblingSessions: [CaptureSession] = []) async throws {
         // Serialized: see VirtualDisplayCoordinator for why concurrent session startups aren't safe.
         await VirtualDisplayCoordinator.shared.lock()
         defer { Task { await VirtualDisplayCoordinator.shared.unlock() } }
@@ -152,54 +305,103 @@ final class CaptureSession: NSObject {
         self.originalFrame = originalFrame
         currentPiPSize = originalFrame.size
 
-        // Always created at VirtualDisplayHost's full maxPixelsWide/maxPixelsHigh ceiling —
-        // *not* floored/sized to just the window's own size the way this used to work — so a
-        // later PiP-panel resize (resizeSourceWindow) always has room to grow the window into
-        // without needing to change the display's own resolution mid-session.
-        //
-        // That used to be handled by re-applying a bigger CGVirtualDisplayMode at resize time
-        // (VirtualDisplayHost.resize), on the theory that it's the same applySettings call used
-        // at creation, just invoked again — the pattern BetterDisplay/DeskPad document for this
-        // private API. In practice that didn't reliably take effect against a display an SCStream
-        // was already actively capturing (bounds/config staying pinned at the original mode), so
-        // a PiP resize would track correctly only up to whatever slack the *initial* size
-        // happened to leave, then silently clamp there — "changes a bit, then stops matching the
-        // panel" is exactly that ceiling being hit. Starting at the ceiling instead sidesteps the
-        // question entirely: SCStreamConfiguration.sourceRect already crops the capture down to
-        // just the window's own rect regardless of how big the underlying display canvas is (see
-        // makeConfiguration), so there's no meaningful capture-bandwidth cost to the display being
-        // bigger than the window actually needs.
+        // Leased from the application-level pool at whatever virtualDisplayLongEdge currently is
+        // (SettingsStore.
+        // virtualDisplayLongEdge, defaulting to VirtualDisplayHost's maxPixelsWide/maxPixelsHigh
+        // ceiling) — generous rather than floored/sized to just the window's own size, so a later
+        // PiP-panel resize (resizeSourceWindow) has room to grow the window into without
+        // necessarily needing to change the display's own resolution mid-session. It also *can*
+        // change mid-session now, live, via virtualDisplayLongEdge's own didSet calling
+        // VirtualDisplayHost.resize(pixelWidth:pixelHeight:) — see that method's doc comment for
+        // how this was verified to actually work even against an actively-capturing SCStream, and
+        // VirtualDisplayHost.bounds's doc comment for the one wrinkle (CGDisplayBounds itself never
+        // reflects the new size, so bounds tracks it independently instead). SCStreamConfiguration.
+        // sourceRect already crops the capture down to just the window's own rect regardless of how
+        // big the underlying display canvas is (see makeConfiguration), so there's no meaningful
+        // capture-bandwidth cost to the display being bigger than the window actually needs.
         //
         // CGVirtualDisplay must be created on the main thread — off-main creation was
         // observed to silently produce a display that never shows up in
         // SCShareableContent's display list.
-        let host = try await MainActor.run { () -> VirtualDisplayHost in
-            guard let host = VirtualDisplayHost(
-                pixelWidth: VirtualDisplayHost.maxPixelsWide,
-                pixelHeight: VirtualDisplayHost.maxPixelsHigh,
-                name: "PiPanel – \(windowInfo.ownerAppName)"
-            ) else {
-                throw CaptureSessionError.virtualDisplayCreationFailed
+        let virtualDisplayPixelSize = VirtualDisplayHost.pixelSize(forLongEdge: virtualDisplayLongEdge)
+        let pooledLease = await MainActor.run {
+            VirtualDisplayPool.shared.lease(
+                pixelWidth: virtualDisplayPixelSize.width,
+                pixelHeight: virtualDisplayPixelSize.height
+            )
+        }
+        let host: VirtualDisplayHost
+        let createdDuringStart: Bool
+        let mutatedTopology: Bool
+        if let pooledLease {
+            host = pooledLease.host
+            createdDuringStart = false
+            mutatedTopology = pooledLease.mutatedTopology
+        } else {
+            host = try await MainActor.run { () -> VirtualDisplayHost in
+                guard let host = VirtualDisplayHost(
+                    pixelWidth: virtualDisplayPixelSize.width,
+                    pixelHeight: virtualDisplayPixelSize.height,
+                    name: "PiPanel Overflow – \(windowInfo.ownerAppName)"
+                ) else {
+                    throw CaptureSessionError.virtualDisplayCreationFailed
+                }
+                VirtualDisplayPool.shared.adoptLeased(host)
+                return host
             }
-            return host
+            createdDuringStart = true
+            mutatedTopology = true
         }
         virtualDisplayHost = host
 
-        try await moveWindowOntoVirtualDisplay(host: host, axWindow: axWindow, size: currentPiPSize)
-        presentationState = .pip
-        startFrameWatch(axWindow: axWindow, host: host)
-        observeScreenParameterChanges()
+        // The normal path leases an already-registered host and performs no display mutation at
+        // all. Only an overflow creation or a resolution-mismatch resize needs the expensive
+        // topology barrier and sibling repair used by the former per-session-display design.
+        _ = try await Self.waitForValidBounds(of: host, positionNewDisplay: createdDuringStart)
+        if mutatedTopology {
+            let topologyHosts = [host] + siblingSessions.compactMap(\.virtualDisplayHost)
+            await Self.waitForStableTopology(hosts: topologyHosts)
+            for sibling in siblingSessions where sibling !== self {
+                await sibling.reanchorWhileTopologyLockIsHeld()
+            }
+        }
+
+        try await moveWindowOntoVirtualDisplay(
+            host: host,
+            axWindow: axWindow,
+            size: currentPiPSize,
+            positionNewDisplay: false
+        )
 
         let scDisplay = try await Self.waitForShareableDisplay(matching: host.displayID)
 
-        let filter = SCContentFilter(display: scDisplay, excludingWindows: [])
-        let config = Self.makeConfiguration(for: framedRect, displaySize: host.bounds.size, fps: targetFPS)
+        // Defense in depth: even if WindowServer produces another late transient placement, an
+        // older session's source is never eligible to appear in this brand-new stream.
+        let siblingWindows = siblingSessions.map { $0.windowInfo.scWindow }
+        let filter = SCContentFilter(display: scDisplay, excludingWindows: siblingWindows)
+        let config = Self.makeConfiguration(
+            for: framedRect,
+            displaySize: host.bounds.size,
+            displayPixelScale: host.pixelsPerPoint,
+            fps: effectiveTargetFPS,
+            maxLongEdge: maxOutputLongEdge
+        )
 
         let stream = SCStream(filter: filter, configuration: config, delegate: self)
         try stream.addStreamOutput(self, type: .screen, sampleHandlerQueue: sampleQueue)
         try await stream.startCapture()
         self.stream = stream
+        presentationState = .pip
+        observeScreenParameterChanges()
+        startFrameWatch(axWindow: axWindow, host: host)
         startStallWatchdog()
+        // panel.maxSize is created before this host exists and can only use the raw slider pixel
+        // value. Now that the display has registered and its pixel→point scale is calibrated,
+        // publish the real coordinate-space limit. This is what makes a non-default resolution
+        // selected before opening a PiP take effect immediately, not only after the slider moves
+        // again or the user happens to drag a panel edge.
+        let reportInitialDeliverableSize = onDeliverableSizeChanged
+        await MainActor.run { reportInitialDeliverableSize?() }
         PiPanelLogger.capture.info("Capture started for window \(self.windowInfo.id) (\(self.windowInfo.ownerAppName)) via virtual display \(host.displayID)")
     }
 
@@ -213,9 +415,17 @@ final class CaptureSession: NSObject {
     /// the virtual display, so macOS full-screened it on whichever *real* screen it was still
     /// sitting on at that moment — visibly disrupting the user's actual desktop, which is exactly
     /// what this app exists to avoid. Back to plain windowed placement + waitForFrameToSettle.
-    private func moveWindowOntoVirtualDisplay(host: VirtualDisplayHost, axWindow: AXUIElement, size: CGSize) async throws {
+    private func moveWindowOntoVirtualDisplay(
+        host: VirtualDisplayHost,
+        axWindow: AXUIElement,
+        size: CGSize,
+        positionNewDisplay: Bool = false
+    ) async throws {
         let margin = VirtualDisplayHost.menuBarInset
-        let bounds = try await Self.waitForValidBounds(of: host)
+        let bounds = try await Self.waitForValidBounds(
+            of: host,
+            positionNewDisplay: positionNewDisplay
+        )
 
         let targetOrigin = CGPoint(x: bounds.origin.x + Self.edgeMargin, y: bounds.origin.y + margin)
         let targetFrame = CGRect(origin: targetOrigin, size: size)
@@ -267,6 +477,7 @@ final class CaptureSession: NSObject {
     /// frame actually differs from what's currently framed, keeps that from ever going stale
     /// instead of only checking once at the start.
     private func startFrameWatch(axWindow: AXUIElement, host: VirtualDisplayHost) {
+        guard !isStopping else { return }
         frameWatchTimer?.invalidate()
         let timer = Timer(timeInterval: 0.5, repeats: true) { [weak self] _ in
             self?.refreshFramedRectIfNeeded(axWindow: axWindow, host: host)
@@ -281,7 +492,12 @@ final class CaptureSession: NSObject {
     }
 
     private func refreshFramedRectIfNeeded(axWindow: AXUIElement, host: VirtualDisplayHost) {
-        guard presentationState == .pip, let current = AXWindowLocator.frame(of: axWindow) else { return }
+        // A screen-change notification stops this timer immediately, but an already-enqueued timer
+        // callback may still arrive. Never turn a transient topology position into a live stream
+        // crop while the stabilized re-anchor is pending — that exact update is what let another
+        // session's source window appear inside an older PiP in the trace.
+        guard presentationState == .pip, !isReanchoring, !isStopping,
+              let current = AXWindowLocator.frame(of: axWindow) else { return }
         let bounds = host.bounds
         let updated = CGRect(
             x: current.origin.x - bounds.origin.x,
@@ -295,9 +511,9 @@ final class CaptureSession: NSObject {
         Task { try? await applyConfiguration() }
     }
 
-    /// Destroying one session's CGVirtualDisplay (M4: another session's stop()) can make macOS
-    /// reflow the global desktop arrangement — the same way unplugging a physical monitor shifts
-    /// where the *remaining* ones sit. VirtualDisplayHost.bounds already reads that shift live,
+    /// Any real display-topology change (an overflow host being created/discarded, a virtual mode
+    /// resize, a physical monitor change, or app shutdown) can make macOS reflow the global desktop
+    /// arrangement. VirtualDisplayHost.bounds already reads that shift live,
     /// but the window itself isn't guaranteed to move in lockstep with its display through a
     /// reflow, so refreshFramedRectIfNeeded's crop math (live window frame − live display origin)
     /// can end up describing a region that no longer actually contains this session's window —
@@ -322,19 +538,83 @@ final class CaptureSession: NSObject {
     }
 
     private func reanchorAfterDisplayReconfiguration() {
-        guard presentationState == .pip, !isReanchoring,
+        guard presentationState == .pip, !isStopping,
               let host = virtualDisplayHost, let axWindow else { return }
+
+        // Freeze the last known-good crop before doing anything asynchronous. Creating a sibling
+        // display can move this window several thousand points for a fraction of a second; the old
+        // frame watcher used to observe that position and update SCStream immediately, before the
+        // later re-anchor had a chance to correct it.
+        stopFrameWatch()
+        guard !isReanchoring else { return }
         isReanchoring = true
+        reanchorTaskGeneration &+= 1
+        let generation = reanchorTaskGeneration
+        debugTrace("vdisplay: reanchor queued windowID=\(windowInfo.id) displayID=\(host.displayID) liveFrame=\(AXWindowLocator.frame(of: axWindow) ?? .zero) displayBounds=\(host.bounds)")
         Task { [weak self] in
             guard let self else { return }
-            defer { self.isReanchoring = false }
+
+            // CaptureSession.start() holds this same lock from before CGVirtualDisplay.apply(_:)
+            // until its two-phase startup has synchronously repaired every existing session and
+            // started the new stream. A sibling-barrier repair invalidates this queued task; in
+            // every other case waiting here converts a burst of intermediate screen-change
+            // notifications into one correction against the final arrangement. It also serializes
+            // against live mode changes and display teardown below.
+            await VirtualDisplayCoordinator.shared.lock()
+            guard self.reanchorTaskGeneration == generation,
+                  !self.isStopping, self.presentationState == .pip,
+                  self.virtualDisplayHost === host else {
+                await VirtualDisplayCoordinator.shared.unlock()
+                if self.reanchorTaskGeneration == generation {
+                    self.isReanchoring = false
+                }
+                return
+            }
+
+            debugTrace("vdisplay: reanchor stabilized windowID=\(self.windowInfo.id) displayID=\(host.displayID) liveFrame=\(AXWindowLocator.frame(of: axWindow) ?? .zero) displayBounds=\(host.bounds)")
             do {
                 try await self.moveWindowOntoVirtualDisplay(host: host, axWindow: axWindow, size: self.currentPiPSize)
                 try await self.applyConfiguration()
             } catch {
                 PiPanelLogger.capture.error("Failed to re-anchor window \(self.windowInfo.id) after display reconfiguration: \(error)")
             }
+            await VirtualDisplayCoordinator.shared.unlock()
+            guard self.reanchorTaskGeneration == generation else { return }
+            self.isReanchoring = false
+
+            if !self.isStopping, self.presentationState == .pip,
+               self.virtualDisplayHost === host {
+                self.startFrameWatch(axWindow: axWindow, host: host)
+            }
         }
+    }
+
+    /// Called only by another CaptureSession.start while that startup owns
+    /// VirtualDisplayCoordinator's lock. Creating its display may have carried this source window
+    /// along with a transient global reflow; repair this session before the newcomer moves its own
+    /// source or starts capturing. This deliberately does not acquire the coordinator again.
+    private func reanchorWhileTopologyLockIsHeld() async {
+        guard presentationState == .pip, !isStopping,
+              let host = virtualDisplayHost, let axWindow,
+              currentPiPSize.width > 0, currentPiPSize.height > 0 else { return }
+
+        stopFrameWatch()
+        debugTrace("vdisplay: sibling barrier reanchor begin windowID=\(windowInfo.id) displayID=\(host.displayID) liveFrame=\(AXWindowLocator.frame(of: axWindow) ?? .zero) displayBounds=\(host.bounds)")
+        do {
+            try await moveWindowOntoVirtualDisplay(host: host, axWindow: axWindow, size: currentPiPSize)
+            try await applyConfiguration()
+        } catch {
+            PiPanelLogger.capture.error("Failed sibling-barrier re-anchor for window \(self.windowInfo.id): \(error)")
+        }
+
+        // Any didChangeScreenParameters task queued by the same topology mutation is now stale:
+        // this synchronous correction consumed it against the stable arrangement.
+        reanchorTaskGeneration &+= 1
+        isReanchoring = false
+        if !isStopping, presentationState == .pip, virtualDisplayHost === host {
+            startFrameWatch(axWindow: axWindow, host: host)
+        }
+        debugTrace("vdisplay: sibling barrier reanchor end windowID=\(windowInfo.id) displayID=\(host.displayID) liveFrame=\(AXWindowLocator.frame(of: axWindow) ?? .zero) displayBounds=\(host.bounds)")
     }
 
     /// The source app just became frontmost (M3) — pull its window back onto the physical
@@ -353,10 +633,22 @@ final class CaptureSession: NSObject {
     func enterPiPState() async {
         guard presentationState == .sourceActive,
               let host = virtualDisplayHost, let axWindow else { return }
+        await VirtualDisplayCoordinator.shared.lock()
+        guard !isStopping, presentationState == .sourceActive,
+              virtualDisplayHost === host else {
+            await VirtualDisplayCoordinator.shared.unlock()
+            return
+        }
         do {
             try await moveWindowOntoVirtualDisplay(host: host, axWindow: axWindow, size: currentPiPSize)
             if let stream {
-                let config = Self.makeConfiguration(for: framedRect, displaySize: host.bounds.size, fps: targetFPS)
+                let config = Self.makeConfiguration(
+                    for: framedRect,
+                    displaySize: host.bounds.size,
+                    displayPixelScale: host.pixelsPerPoint,
+                    fps: effectiveTargetFPS,
+                    maxLongEdge: maxOutputLongEdge
+                )
                 try await stream.updateConfiguration(config)
             }
             presentationState = .pip
@@ -364,6 +656,7 @@ final class CaptureSession: NSObject {
         } catch {
             PiPanelLogger.capture.error("Failed to resume PiP for window \(self.windowInfo.id): \(error)")
         }
+        await VirtualDisplayCoordinator.shared.unlock()
     }
 
     // MARK: - PiP-panel resize
@@ -381,8 +674,54 @@ final class CaptureSession: NSObject {
     /// whatever the newest recorded size is until nothing's left queued — a depth-1 coalescing
     /// queue, so the source window is always chasing the panel's current size rather than working
     /// through every intermediate size it passed through on the way there.
+    ///
+    /// panelSize arrives in the PiP panel's own point-space, which is *not* the same as the
+    /// source window's: the panel is created at a fixed default thumbnail width (PiPSessionManager
+    /// .defaultPanelFrame — currently 340pt), entirely decoupled from however big the real source
+    /// window actually is (e.g. a 1400x900 window still gets an ~340x218 panel). That's fine for
+    /// just *displaying* the mirror — the video layer scales the picture to fit whatever the
+    /// panel's bounds are — but forwarding panelSize straight through as the source window's resize
+    /// target isn't: the moment any edge-drag fired, the real window was instantly commanded to
+    /// collapse (or balloon) to the panel's own absolute size, e.g. a 1400x900 window snapping down
+    /// to ~340x218 on the very first drag tick, rather than scaling proportionally the way the
+    /// panel is only ever meant to be a shrunk-down mirror of the source.
+    ///
+    /// panelToSourceScale fixes that: established once, from this method's very first call in the
+    /// session, as a single *uniform* scalar (area ratio, i.e. currentPiPSize's area over
+    /// panelSize's area, square-rooted back down to a linear factor) rather than independent
+    /// width/height ratios — then held fixed for the rest of the session. Every subsequent
+    /// panelSize this method receives has both axes multiplied by that same one number before
+    /// anything downstream ever sees it, so growing/shrinking the panel scales the source
+    /// proportionally (matching the porthole relationship the user already sees visually) instead
+    /// of snapping it to the panel's own absolute size.
+    ///
+    /// Independent per-axis factors (currentPiPSize.width/panelSize.width and the height
+    /// equivalent) were tried first and reverted: they only *approximately* tracked the panel's
+    /// current aspect ratio, matching exactly only insofar as the two factors happened to be
+    /// nearly equal (true right at the moment they're established, since defaultPanelFrame gives
+    /// the panel the same aspect as the window — but not guaranteed to stay that way, and not
+    /// remotely true once either axis starts getting clamped independently by
+    /// clampedToKnownFloor/Ceiling or clampToDeliverableSize below). In practice that read as the
+    /// source staying locked near whatever aspect ratio it started with, no matter how the panel's
+    /// own shape was dragged. A single shared scalar guarantees the source's aspect ratio always
+    /// exactly matches the panel's *current* one instead, by construction: since both axes are
+    /// multiplied by the same number, (panelWidth*scale)/(panelHeight*scale) always reduces to
+    /// panelWidth/panelHeight, with zero drift regardless of how far the panel's shape diverges
+    /// from where it started — up to the hard physical ceiling of what the virtual display can
+    /// actually deliver, at which point the mismatch is exactly what updateContentScalingMode's
+    /// letterboxing exists to absorb.
     func resizeSourceWindow(to panelSize: CGSize) {
-        pendingResizeSize = panelSize
+        let scale = panelToSourceScale ?? {
+            let panelArea = panelSize.width * panelSize.height
+            let sourceArea = currentPiPSize.width * currentPiPSize.height
+            let established: CGFloat = panelArea > 0 ? (sourceArea / panelArea).squareRoot() : 1
+            debugTrace("grow: established panelToSourceScale=\(established) from currentPiPSize=\(currentPiPSize) panelSize=\(panelSize)")
+            panelToSourceScale = established
+            return established
+        }()
+        let sourceTargetSize = CGSize(width: panelSize.width * scale, height: panelSize.height * scale)
+
+        pendingResizeSize = sourceTargetSize
         guard !isResizingSourceWindow else { return }
         isResizingSourceWindow = true
         Task {
@@ -426,7 +765,8 @@ final class CaptureSession: NSObject {
     /// track, which is what made growing back out past the floor sometimes leave the source
     /// lagging behind the panel until both dimensions happened to clear it at once.
     private func applyPanelResize(to panelSize: CGSize) async {
-        guard presentationState == .pip, let axWindow, let host = virtualDisplayHost,
+        guard presentationState == .pip, !isReanchoring, !isStopping,
+              let axWindow, let host = virtualDisplayHost,
               framedRect.width > 0, framedRect.height > 0 else {
             debugTrace("grow: applyPanelResize bailed panelSize=\(panelSize) presentationState=\(presentationState) framedRect=\(framedRect)")
             return
@@ -444,7 +784,7 @@ final class CaptureSession: NSObject {
         let boundedPanelSize = clampedToKnownCeiling(flooredPanelSize)
         let targetSize = clampToDeliverableSize(boundedPanelSize, within: bounds)
         debugTrace("grow: applyPanelResize panelSize=\(panelSize) boundedPanelSize=\(boundedPanelSize) targetSize=\(targetSize) framedRectBefore=\(framedRect) boundsOrigin=\(bounds.origin) boundsSize=\(bounds.size)")
-        let actualFrame = await commitSourceWindowSize(targetSize, axWindow: axWindow, displayOrigin: bounds.origin)
+        let actualFrame = await commitSourceWindowSize(targetSize, requestedSize: boundedPanelSize, axWindow: axWindow, displayOrigin: bounds.origin)
         syncCaptureRegion(to: actualFrame, displayOrigin: bounds.origin)
         debugTrace("grow: applyPanelResize done targetSize=\(targetSize) actualFrame=\(actualFrame) framedRectAfter=\(framedRect)")
 
@@ -476,13 +816,31 @@ final class CaptureSession: NSObject {
     /// change was tried and abandoned) — PiPPanelController.panel.maxSize keeps the panel itself
     /// from even being draggable past this ceiling in the first place; this is the backend's own
     /// defense in depth against that same limit.
+    ///
+    /// Clamps *uniformly* (scaling both axes down by the same factor) rather than clamping width
+    /// and height independently to maxWidth/maxHeight. Independent clamping was tried first and
+    /// reverted: once the request exceeded the deliverable bounds on both axes at once (easy to
+    /// reach — resizeSourceWindow's panelToSourceScale is routinely >2x, so a still-modest panel
+    /// size already asks for something well past what a ~1200x716 virtual display can back), each
+    /// axis got pinned independently at its own ceiling, and the result's aspect ratio collapsed
+    /// to whatever the *display's own* fixed maxWidth:maxHeight ratio happens to be rather than
+    /// the requested one — e.g. a request for (1893, 1572) — an aspect around 1.2 — coming back as
+    /// (1200, 716), an aspect around 1.68, no matter how much further the panel kept changing
+    /// shape from there. That's a real, app-independent ceiling (the virtual display's own fixed
+    /// canvas), not something any app is refusing — so unlike a genuine app-imposed floor/ceiling,
+    /// there's no reason the *shape* has to suffer for it: scaling the whole request down by
+    /// whichever axis is tighter preserves the requested aspect ratio exactly, just at a smaller
+    /// overall size, so the mirrored window keeps tracking the panel's current proportions even
+    /// while pinned at the display's absolute capacity.
     private func clampToDeliverableSize(_ size: CGSize, within bounds: CGRect) -> CGSize {
         let maxWidth = max(bounds.width - framedRect.origin.x - Self.edgeMargin, 1)
         let maxHeight = max(bounds.height - framedRect.origin.y - Self.edgeMargin, 1)
-        let clamped = CGSize(width: min(size.width, maxWidth), height: min(size.height, maxHeight))
-        if clamped.width < size.width - 1 || clamped.height < size.height - 1 {
-            debugTrace("grow: clampToDeliverableSize CLAMPED requested=\(size) -> \(clamped) maxWidth=\(maxWidth) maxHeight=\(maxHeight) framedRectOrigin=\(framedRect.origin) boundsSize=\(bounds.size)")
+        guard size.width > 0, size.height > 0, size.width > maxWidth || size.height > maxHeight else {
+            return size
         }
+        let scale = min(maxWidth / size.width, maxHeight / size.height)
+        let clamped = CGSize(width: size.width * scale, height: size.height * scale)
+        debugTrace("grow: clampToDeliverableSize CLAMPED requested=\(size) -> \(clamped) maxWidth=\(maxWidth) maxHeight=\(maxHeight) framedRectOrigin=\(framedRect.origin) boundsSize=\(bounds.size)")
         return clamped
     }
 
@@ -490,14 +848,17 @@ final class CaptureSession: NSObject {
     /// can correct panel.maxSize to match. panel.maxSize is set once, at panel-creation time,
     /// before the virtual display even exists yet — it has to assume VirtualDisplayHost's
     /// aspirational maxPixelsWide/maxPixelsHigh ceiling, since nothing more specific is known yet.
-    /// CGVirtualDisplay is an undocumented private API with no guarantee it honors the exact mode
-    /// requested — observed in practice: with several concurrent PiP sessions' virtual displays
-    /// active, a newly-created one's live bounds sometimes come back smaller than what was
-    /// requested (likely some internal resource limit). If that happens, the panel would otherwise
-    /// keep being draggable well past what this backend can actually deliver, forever silently
-    /// clamped by clampToDeliverableSize while looking, to the user, exactly like the source
-    /// window simply refusing to keep up — the same failure mode as an undiscovered app-level
-    /// ceiling, just caused by the display instead of the app.
+    ///
+    /// This originally carried a warning that CGVirtualDisplay might silently grant less than
+    /// requested under resource pressure (several concurrent sessions active, etc.), with the
+    /// implication that something should poll a live API to detect and correct for it. Two such
+    /// attempts (CGDisplayBounds-based, then SCShareableContent-based — see VirtualDisplayHost.
+    /// bounds's own doc comment for the detailed history) were built and both reverted: neither API
+    /// ever reliably reflects this private API's true applied mode, so "detecting" the supposed
+    /// under-grant just meant clamping every session to one of a small set of bogus placeholder
+    /// sizes, which is strictly worse than the original theoretical risk (never actually confirmed
+    /// to happen) ever was. VirtualDisplayHost.currentPixelSize — what was actually requested via
+    /// init/resize — is trusted unconditionally now.
     var deliverableMaxSize: CGSize? {
         guard let bounds = virtualDisplayHost?.bounds, framedRect.width > 0 else { return nil }
         return CGSize(
@@ -551,7 +912,40 @@ final class CaptureSession: NSObject {
     /// same size call after call no matter how much bigger the target gets, which is exactly what
     /// was observed for System Settings' Accessibility pane (a settings-window-style app quietly
     /// capping its own width — the mirror image of Notes' minimum-width case).
-    private func commitSourceWindowSize(_ targetSize: CGSize, axWindow: AXUIElement, displayOrigin: CGPoint) async -> CGRect {
+    ///
+    /// Neither signal is trusted off a single sample, though — a "no progress" read 80ms after the
+    /// request is also exactly what a window with a longer (e.g. spring-animated, or reflowing a
+    /// busy layout) resize looks like *while it's still mid-animation*, especially on the first tick
+    /// or two of a drag before anything's had a chance to warm up. Mistaking that for a hard
+    /// refusal was observed to permanently cap the mirror near the window's *starting* size for
+    /// apps that have no real min/max at all — nothing else ever re-tests a discovered bound once
+    /// applyPanelResize starts clamping to it. Requiring the same signal on boundConfirmationStreak
+    /// *consecutive* commits (suspectedMin/MaxWidth/Height + their own streak counters) before
+    /// actually committing to a discovered bound filters that out: a genuinely capped app reports
+    /// the identical actual size call after call, so a short streak is still definitive, while a
+    /// merely-slow app usually shows visible progress within a tick or two (each lands ~80-150ms
+    /// later, the same cadence as this call), clearing the suspicion before it's confirmed. Was
+    /// originally just 2 in a row — see boundConfirmationStreak's own doc comment for the real
+    /// false-positive that turned out not to be a strong enough signal in practice.
+    ///
+    /// requestedSize is what applyPanelResize actually wanted for this axis *before*
+    /// clampToDeliverableSize possibly scaled it down to fit the virtual display's own fixed
+    /// capacity — targetSize is what was actually sent to the app. The two differ exactly when the
+    /// display's capacity, not anything about the app, is what's limiting this request. That case
+    /// has to be excluded from floor/ceiling detection on the affected axis, not just tolerated:
+    /// when clampToDeliverableSize shrinks a request to, say, 1200 on an axis whose window is
+    /// currently sitting at 1203 (a 3pt difference — nothing was actually being asked to shrink in
+    /// any meaningful sense), the app's unchanged actual naturally reads as "bigger than target",
+    /// which used to get confirmed as a genuine app floor at ~1203. Since that's *above* the
+    /// display's own maxWidth (1200), clampedToKnownFloor and clampToDeliverableSize would then
+    /// fight each other forever afterward — the floor demanding at least 1203, the display capping
+    /// at 1200 — freezing that axis at ~1200-1203 for the rest of the session regardless of
+    /// anything the panel does from then on, which is exactly what broke aspect tracking once the
+    /// panel grew large enough to hit the display's capacity. Skipping discovery entirely on an
+    /// axis (and clearing any pending suspicion on it) whenever the display's own clamp — not the
+    /// app — is why requestedSize and targetSize differ avoids ever manufacturing a floor/ceiling
+    /// out of our own conservative request instead of the app's real behavior.
+    private func commitSourceWindowSize(_ targetSize: CGSize, requestedSize: CGSize, axWindow: AXUIElement, displayOrigin: CGPoint) async -> CGRect {
         let previousActual = framedRect.size
         let absoluteOrigin = CGPoint(x: displayOrigin.x + framedRect.origin.x, y: displayOrigin.y + framedRect.origin.y)
         let requestedFrame = CGRect(origin: absoluteOrigin, size: targetSize)
@@ -561,16 +955,71 @@ final class CaptureSession: NSObject {
         debugTrace("grow: commitSourceWindowSize target=\(targetSize) actual=\(actualFrame.size) previousActual=\(previousActual) axWindowFrameReadOK=\(AXWindowLocator.frame(of: axWindow) != nil)")
 
         let tolerance: CGFloat = 1
+        let widthWasDisplayClamped = targetSize.width < requestedSize.width - tolerance
+        let heightWasDisplayClamped = targetSize.height < requestedSize.height - tolerance
+        // A sample only counts as evidence toward a discovered bound if this tick's target is
+        // itself genuinely more extreme than the *previous tick's target* — not just bigger/
+        // smaller than wherever the window happens to already sit (previousActual). Without this,
+        // a static, unchanging target repeated tick after tick (e.g. resizeSourceWindow's scaled
+        // output pinned constant because the panel itself is sitting at its own minSize/maxSize
+        // while the user keeps moving the mouse on the *other* axis) trivially satisfies "target
+        // exceeds previousActual" forever once the app's own pixel/character-grid rounding first
+        // snaps actual to some nearby value — see previousTargetSize's own doc comment for the
+        // real regression this was confirmed against.
+        let isFreshWidthShrinkProbe = targetSize.width < previousTargetSize.width - tolerance
+        let isFreshHeightShrinkProbe = targetSize.height < previousTargetSize.height - tolerance
+        let isFreshWidthGrowProbe = targetSize.width > previousTargetSize.width + tolerance
+        let isFreshHeightGrowProbe = targetSize.height > previousTargetSize.height + tolerance
+
         var discoveredFloor = false
-        if actualFrame.width > targetSize.width + tolerance {
-            debugTrace("grow: discovered WIDTH floor actual=\(actualFrame.width) target=\(targetSize.width)")
-            discoveredMinWidth = actualFrame.width
-            discoveredFloor = true
+        if widthWasDisplayClamped {
+            suspectedMinWidth = nil
+            suspectedMinWidthStreak = 0
+        } else if !isFreshWidthShrinkProbe {
+            // Same (or bigger) request repeated — no new evidence either way this tick; leave any
+            // existing suspicion exactly as it was rather than resetting or advancing it.
+        } else if actualFrame.width > targetSize.width + tolerance {
+            if let suspected = suspectedMinWidth, abs(suspected - actualFrame.width) < tolerance {
+                suspectedMinWidthStreak += 1
+                if suspectedMinWidthStreak >= Self.boundConfirmationStreak {
+                    debugTrace("grow: CONFIRMED WIDTH floor actual=\(actualFrame.width) target=\(targetSize.width)")
+                    discoveredMinWidth = actualFrame.width
+                    discoveredFloor = true
+                } else {
+                    debugTrace("grow: suspected WIDTH floor actual=\(actualFrame.width) target=\(targetSize.width) streak=\(suspectedMinWidthStreak) (awaiting confirmation)")
+                }
+            } else {
+                suspectedMinWidth = actualFrame.width
+                suspectedMinWidthStreak = 1
+                debugTrace("grow: suspected WIDTH floor actual=\(actualFrame.width) target=\(targetSize.width) streak=1 (awaiting confirmation)")
+            }
+        } else {
+            suspectedMinWidth = nil
+            suspectedMinWidthStreak = 0
         }
-        if actualFrame.height > targetSize.height + tolerance {
-            debugTrace("grow: discovered HEIGHT floor actual=\(actualFrame.height) target=\(targetSize.height)")
-            discoveredMinHeight = actualFrame.height
-            discoveredFloor = true
+        if heightWasDisplayClamped {
+            suspectedMinHeight = nil
+            suspectedMinHeightStreak = 0
+        } else if !isFreshHeightShrinkProbe {
+            // See the width branch above.
+        } else if actualFrame.height > targetSize.height + tolerance {
+            if let suspected = suspectedMinHeight, abs(suspected - actualFrame.height) < tolerance {
+                suspectedMinHeightStreak += 1
+                if suspectedMinHeightStreak >= Self.boundConfirmationStreak {
+                    debugTrace("grow: CONFIRMED HEIGHT floor actual=\(actualFrame.height) target=\(targetSize.height)")
+                    discoveredMinHeight = actualFrame.height
+                    discoveredFloor = true
+                } else {
+                    debugTrace("grow: suspected HEIGHT floor actual=\(actualFrame.height) target=\(targetSize.height) streak=\(suspectedMinHeightStreak) (awaiting confirmation)")
+                }
+            } else {
+                suspectedMinHeight = actualFrame.height
+                suspectedMinHeightStreak = 1
+                debugTrace("grow: suspected HEIGHT floor actual=\(actualFrame.height) target=\(targetSize.height) streak=1 (awaiting confirmation)")
+            }
+        } else {
+            suspectedMinHeight = nil
+            suspectedMinHeightStreak = 0
         }
         if discoveredFloor {
             let discovered = CGSize(width: discoveredMinWidth ?? 0, height: discoveredMinHeight ?? 0)
@@ -579,15 +1028,54 @@ final class CaptureSession: NSObject {
         }
 
         var discoveredCeiling = false
-        if targetSize.width > previousActual.width + tolerance, abs(actualFrame.width - previousActual.width) < tolerance {
-            debugTrace("grow: discovered WIDTH ceiling actual=\(actualFrame.width) target=\(targetSize.width)")
-            discoveredMaxWidth = actualFrame.width
-            discoveredCeiling = true
+        if widthWasDisplayClamped {
+            suspectedMaxWidth = nil
+            suspectedMaxWidthStreak = 0
+        } else if !isFreshWidthGrowProbe {
+            // Same (or smaller) request repeated — see the floor branch above for why this isn't
+            // treated as either confirming or clearing progress.
+        } else if targetSize.width > previousActual.width + tolerance, abs(actualFrame.width - previousActual.width) < tolerance {
+            if let suspected = suspectedMaxWidth, abs(suspected - actualFrame.width) < tolerance {
+                suspectedMaxWidthStreak += 1
+                if suspectedMaxWidthStreak >= Self.boundConfirmationStreak {
+                    debugTrace("grow: CONFIRMED WIDTH ceiling actual=\(actualFrame.width) target=\(targetSize.width)")
+                    discoveredMaxWidth = actualFrame.width
+                    discoveredCeiling = true
+                } else {
+                    debugTrace("grow: suspected WIDTH ceiling actual=\(actualFrame.width) target=\(targetSize.width) streak=\(suspectedMaxWidthStreak) (awaiting confirmation)")
+                }
+            } else {
+                suspectedMaxWidth = actualFrame.width
+                suspectedMaxWidthStreak = 1
+                debugTrace("grow: suspected WIDTH ceiling actual=\(actualFrame.width) target=\(targetSize.width) streak=1 (awaiting confirmation)")
+            }
+        } else {
+            suspectedMaxWidth = nil
+            suspectedMaxWidthStreak = 0
         }
-        if targetSize.height > previousActual.height + tolerance, abs(actualFrame.height - previousActual.height) < tolerance {
-            debugTrace("grow: discovered HEIGHT ceiling actual=\(actualFrame.height) target=\(targetSize.height)")
-            discoveredMaxHeight = actualFrame.height
-            discoveredCeiling = true
+        if heightWasDisplayClamped {
+            suspectedMaxHeight = nil
+            suspectedMaxHeightStreak = 0
+        } else if !isFreshHeightGrowProbe {
+            // See the width branch above.
+        } else if targetSize.height > previousActual.height + tolerance, abs(actualFrame.height - previousActual.height) < tolerance {
+            if let suspected = suspectedMaxHeight, abs(suspected - actualFrame.height) < tolerance {
+                suspectedMaxHeightStreak += 1
+                if suspectedMaxHeightStreak >= Self.boundConfirmationStreak {
+                    debugTrace("grow: CONFIRMED HEIGHT ceiling actual=\(actualFrame.height) target=\(targetSize.height)")
+                    discoveredMaxHeight = actualFrame.height
+                    discoveredCeiling = true
+                } else {
+                    debugTrace("grow: suspected HEIGHT ceiling actual=\(actualFrame.height) target=\(targetSize.height) streak=\(suspectedMaxHeightStreak) (awaiting confirmation)")
+                }
+            } else {
+                suspectedMaxHeight = actualFrame.height
+                suspectedMaxHeightStreak = 1
+                debugTrace("grow: suspected HEIGHT ceiling actual=\(actualFrame.height) target=\(targetSize.height) streak=1 (awaiting confirmation)")
+            }
+        } else {
+            suspectedMaxHeight = nil
+            suspectedMaxHeightStreak = 0
         }
         if discoveredCeiling {
             let discovered = CGSize(width: discoveredMaxWidth ?? .infinity, height: discoveredMaxHeight ?? .infinity)
@@ -595,6 +1083,7 @@ final class CaptureSession: NSObject {
             Task { @MainActor in reportDiscovery?(discovered) }
         }
 
+        previousTargetSize = targetSize
         return actualFrame
     }
 
@@ -613,18 +1102,86 @@ final class CaptureSession: NSObject {
 
     /// CGVirtualDisplay's apply(settings:) returning true only means the settings were
     /// accepted — CGDisplayBounds can still read all-zero for a brief moment until the window
-    /// server finishes registering the display's geometry.
-    private static func waitForValidBounds(of host: VirtualDisplayHost) async throws -> CGRect {
+    /// server finishes registering the display's geometry. Polls host.isGeometryRegistered
+    /// (a live CGDisplayBounds check) rather than host.bounds itself: bounds's size now always
+    /// reflects VirtualDisplayHost's own tracked size (non-zero from the moment it's constructed —
+    /// see its doc comment), so it can no longer be used to detect window-server readiness.
+    private static func waitForValidBounds(
+        of host: VirtualDisplayHost,
+        positionNewDisplay: Bool
+    ) async throws -> CGRect {
         for attempt in 0..<10 {
-            let bounds = host.bounds
-            if bounds.width > 0, bounds.height > 0 {
-                return bounds
+            if host.isGeometryRegistered {
+                if positionNewDisplay {
+                    // Only the initial placement may mutate the arrangement. Re-anchors call this
+                    // helper too, but they must consume the now-stable bounds without producing a
+                    // fresh screen-parameters notification for every already-open session.
+                    // Positioning is only safe once registration is confirmed — see
+                    // positionOutsideExistingDisplays's own doc comment.
+                    await MainActor.run { host.positionOutsideExistingDisplays() }
+                }
+                return host.bounds
             }
             if attempt < 9 {
                 try? await Task.sleep(nanoseconds: 100_000_000)
             }
         }
         throw CaptureSessionError.virtualDisplayCreationFailed
+    }
+
+    /// CGVirtualDisplay destruction is asynchronous from WindowServer's point of view. Keep the
+    /// topology lock until both PiPanel's registry and CoreGraphics stop reporting the overflow
+    /// display, otherwise a queued startup can lease/read screens during the removal reflow.
+    private static func waitForDisplayRemoval(_ displayID: CGDirectDisplayID) async {
+        for attempt in 0..<20 {
+            let isStillRegisteredByPiPanel = VirtualDisplayHost.activeDisplayIDs.contains(displayID)
+            let bounds = CGDisplayBounds(displayID)
+            if !isStillRegisteredByPiPanel,
+               (CGDisplayIsActive(displayID) == 0 || bounds.width <= 0 || bounds.height <= 0) {
+                debugTrace("vdisplay pool: removal stabilized displayID=\(displayID) attempt=\(attempt)")
+                return
+            }
+            if attempt < 19 {
+                try? await Task.sleep(nanoseconds: 100_000_000)
+            }
+        }
+        debugTrace("vdisplay pool: removal wait timed out displayID=\(displayID) bounds=\(CGDisplayBounds(displayID))")
+    }
+
+    /// CGCompleteDisplayConfiguration returning success does not mean AppKit/CoreGraphics have
+    /// finished publishing the same final arrangement to every client. Require the new display
+    /// and all existing PiP displays to report unchanged bounds for two consecutive samples before
+    /// repairing any carried-along source windows.
+    private static func waitForStableTopology(hosts: [VirtualDisplayHost]) async {
+        var hostsByDisplayID: [CGDirectDisplayID: VirtualDisplayHost] = [:]
+        for host in hosts {
+            hostsByDisplayID[host.displayID] = host
+        }
+        let uniqueHosts = hostsByDisplayID.values.sorted { $0.displayID < $1.displayID }
+        var previousFrames = uniqueHosts.map(\.bounds)
+        var stableSamples = 0
+
+        for _ in 0..<15 {
+            try? await Task.sleep(nanoseconds: 100_000_000)
+            let currentFrames = uniqueHosts.map(\.bounds)
+            let allRegistered = uniqueHosts.allSatisfy(\.isGeometryRegistered)
+            let unchanged = zip(previousFrames, currentFrames).allSatisfy {
+                isApproximatelyEqual($0.0, $0.1)
+            }
+
+            if allRegistered, unchanged {
+                stableSamples += 1
+                if stableSamples >= 2 {
+                    debugTrace("vdisplay: topology barrier stable displays=\(zip(uniqueHosts, currentFrames).map { "\($0.0.displayID):\($0.1)" })")
+                    return
+                }
+            } else {
+                stableSamples = 0
+            }
+            previousFrames = currentFrames
+        }
+
+        debugTrace("vdisplay: topology barrier timed out displays=\(uniqueHosts.map { "\($0.displayID):\($0.bounds)" })")
     }
 
     /// A newly-created virtual display was observed (Spikes/VirtualDisplaySpike) to take
@@ -645,16 +1202,51 @@ final class CaptureSession: NSObject {
     }
 
     func stop() async {
+        // Stop producing transient crop updates immediately, then wait until any in-flight display
+        // creation/resize/re-anchor has completed before returning this host to the pool.
+        isStopping = true
         stallTimer?.cancel()
         stallTimer = nil
         stopFrameWatch()
         stopObservingScreenParameterChanges()
+        await VirtualDisplayCoordinator.shared.lock()
         if let stream {
             self.stream = nil
             try? await stream.stopCapture()
         }
         restoreWindowIfNeeded()
-        virtualDisplayHost = nil // deallocating tears the virtual display down
+        // restoreWindowIfNeeded only *fires* the AX move back to the real screen — the target app
+        // applies it asynchronously. Wait until it lands before marking this display available;
+        // otherwise a new session could lease it while the previous source still occupies it.
+        var hostIsReusable = true
+        if let axWindow, let originalFrame, let host = virtualDisplayHost {
+            let settledFrame = await Self.waitForFrameToSettle(axWindow: axWindow, fallback: originalFrame)
+            // An app that rejected the restore may still be sitting on this virtual desktop. Do
+            // not hand that desktop to another session, whose display-wide stream could otherwise
+            // include the stale window. Exceptional failed restores discard just this slot.
+            let overlap = settledFrame.intersection(host.bounds)
+            let overlapArea = overlap.isNull ? 0 : overlap.width * overlap.height
+            let windowArea = max(settledFrame.width * settledFrame.height, 1)
+            hostIsReusable = overlapArea / windowArea < 0.5
+        }
+        var hostBeingReleased = virtualDisplayHost
+        virtualDisplayHost = nil
+        var removedDisplayID: CGDirectDisplayID?
+        if let host = hostBeingReleased {
+            let reusable = hostIsReusable
+            let wasRemoved = await MainActor.run {
+                VirtualDisplayPool.shared.release(host, reusable: reusable)
+            }
+            if wasRemoved { removedDisplayID = host.displayID }
+        }
+        // Dropping the last strong reference is what actually unregisters CGVirtualDisplay.
+        // Do it while the topology lock is held, then wait until CoreGraphics confirms removal so
+        // a queued startup cannot observe the half-reflowed arrangement.
+        hostBeingReleased = nil
+        if let removedDisplayID {
+            await Self.waitForDisplayRemoval(removedDisplayID)
+        }
+        await VirtualDisplayCoordinator.shared.unlock()
         PiPanelLogger.capture.info("Capture stopped for window \(self.windowInfo.id)")
     }
 
@@ -673,13 +1265,33 @@ final class CaptureSession: NSObject {
         return AXWindowLocator.frame(of: axWindow)
     }
 
+    /// Identity check used by PiPSessionManager's virtual-display intrusion guard. Comparing the
+    /// AX element itself (rather than PID/title) keeps a second window from the same application
+    /// ineligible to remain on a PiPanel display.
+    func ownsSourceWindow(_ candidate: AXUIElement) -> Bool {
+        guard let axWindow else { return false }
+        return CFEqual(axWindow, candidate)
+    }
+
     private func applyConfiguration() async throws {
         guard let stream, let host = virtualDisplayHost else { return }
-        let config = Self.makeConfiguration(for: framedRect, displaySize: host.bounds.size, fps: targetFPS)
+        let config = Self.makeConfiguration(
+            for: framedRect,
+            displaySize: host.bounds.size,
+            displayPixelScale: host.pixelsPerPoint,
+            fps: effectiveTargetFPS,
+            maxLongEdge: maxOutputLongEdge
+        )
         try await stream.updateConfiguration(config)
     }
 
-    private static func makeConfiguration(for localRect: CGRect, displaySize: CGSize, fps: Int) -> SCStreamConfiguration {
+    private static func makeConfiguration(
+        for localRect: CGRect,
+        displaySize: CGSize,
+        displayPixelScale: CGSize,
+        fps: Int,
+        maxLongEdge: CGFloat
+    ) -> SCStreamConfiguration {
         let config = SCStreamConfiguration()
         config.pixelFormat = kCVPixelFormatType_32BGRA
         config.showsCursor = false
@@ -703,12 +1315,35 @@ final class CaptureSession: NSObject {
         let sourceRect = clamped.isEmpty ? CGRect(origin: .zero, size: displaySize) : clamped
         config.sourceRect = sourceRect
 
-        let maxLongEdge: CGFloat = 1280
-        let longEdge = max(sourceRect.width, sourceRect.height)
-        let scale = longEdge > maxLongEdge ? maxLongEdge / longEdge : 1
-        config.width = max(Int(sourceRect.width * scale), 2)
-        config.height = max(Int(sourceRect.height * scale), 2)
+        let outputSize = outputPixelSize(
+            for: sourceRect.size,
+            pixelsPerPoint: displayPixelScale,
+            maxLongEdge: maxLongEdge
+        )
+        config.width = Int(outputSize.width)
+        config.height = Int(outputSize.height)
         return config
+    }
+
+    /// Converts ScreenCaptureKit's point-space crop into backing pixels before applying the
+    /// user-selected quality ceiling. Treating sourceRect points as pixels made a 2× virtual
+    /// display render at half resolution in each dimension, so quality values above the window's
+    /// logical width had no visible effect.
+    static func outputPixelSize(
+        for sourceSize: CGSize,
+        pixelsPerPoint: CGSize,
+        maxLongEdge: CGFloat
+    ) -> CGSize {
+        let pixelWidth = sourceSize.width * (pixelsPerPoint.width > 0 ? pixelsPerPoint.width : 1)
+        let pixelHeight = sourceSize.height * (pixelsPerPoint.height > 0 ? pixelsPerPoint.height : 1)
+        let nativeLongEdge = max(pixelWidth, pixelHeight)
+        let qualityScale = nativeLongEdge > maxLongEdge && nativeLongEdge > 0
+            ? maxLongEdge / nativeLongEdge
+            : 1
+        return CGSize(
+            width: max((pixelWidth * qualityScale).rounded(), 2),
+            height: max((pixelHeight * qualityScale).rounded(), 2)
+        )
     }
 
     private func startStallWatchdog() {

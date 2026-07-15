@@ -1,529 +1,694 @@
+import AppKit
 import SwiftUI
 
-/// The two stages of the first-launch onboarding flow (AppDelegate shows WelcomeView exactly
-/// once, gated by SettingsStore.hasCompletedWelcome): a looping demo of the app's two core
-/// gestures, then the logo/name page with the "开始使用" action. rawValue doubles as each page's
-/// horizontal slot in the pager.
-private enum WelcomePage: Int, CaseIterable {
-    case demo, start
+private enum WelcomePage {
+    case hero
+    case permissions
 }
 
-/// The looping demo's phases — file-scope (not nested in GestureDemoScene) so WelcomeView can
-/// read the same value to sync the caption text's emphasis to whichever gesture is currently
-/// being demonstrated.
-private enum DemoPhase: CaseIterable {
-    case atRest, shaking, shrinking, floating, dragging, closing
-}
-
-/// A self-built horizontal pager rather than TabView(.page) — this needs a spring-driven, drag-
-/// followable transition (matching macOS's own "What's New" onboarding sheets) that TabView's
-/// page style doesn't expose control over. Both pages sit side by side in a fixed-width HStack;
-/// changing `page` (via button, dot tap, or a committed drag) just animates that HStack's x-offset
-/// with a spring, and an in-progress drag adds its live translation on top so the content visibly
-/// follows the cursor before snapping.
-///
-/// Visual language borrows from ChatGPT's own product chrome rather than a generic macOS/iOS
-/// onboarding look: a cool, near-grayscale surface with a single blue accent doing the color
-/// work, a serif display face for headlines paired with plain system sans for body copy, and calm
-/// rather than bouncy motion. The hero logo mark keeps the app icon's own red/green/blue identity
-/// — everything *around* it (background, accent, type) is what shifted.
-///
-/// Every reveal animation here is driven by declarative `.animation(_:value:)` modifiers tied to
-/// `page` or a single `hasEntered` flag set plainly in `.onAppear` — not imperative
-/// `withAnimation{}` closures dispatched from secondary state. An earlier version used the latter
-/// and content kept failing to actually reach the screen until an unrelated state change forced a
-/// repaint; tying everything to state that's already proven to repaint reliably (page navigation)
-/// avoided that class of bug entirely.
 struct WelcomeView: View {
+    let onRequestCompact: (Bool) -> Void
     let onContinue: () -> Void
 
-    @Environment(\.colorScheme) private var colorScheme
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
-    @State private var page: WelcomePage = .demo
-    @State private var dragTranslation: CGFloat = 0
-    @State private var blobsDrifting = false
-    @State private var hasEntered = false
-    /// Owned here (not inside GestureDemoScene) so demoPage's caption text can react to the same
-    /// phase the animation itself is in.
-    @State private var demoPhase: DemoPhase = .atRest
+    @State private var page: WelcomePage = .hero
+    @State private var isCompact = false
+    @State private var revealsHeroText = false
+    @State private var hasStartedIntro = false
 
-    private let pageWidth: CGFloat = 460
-    private let stageHeight: CGFloat = 340
-    /// Vertical distance from center each demo caption line sits at — the "big" line moves to
-    /// -captionSlotOffset (top slot), the "small" one to +captionSlotOffset (bottom slot), and
-    /// they swap every time isShakeCaptionActive flips.
-    private let captionSlotOffset: CGFloat = 12
+    var body: some View {
+        GeometryReader { proxy in
+            ZStack {
+                if page == .hero {
+                    RefractiveLightField(
+                        isExpanded: !isCompact,
+                        reduceMotion: reduceMotion
+                    )
+                    HeroWelcomePage(
+                        revealsText: revealsHeroText,
+                        showsChrome: isCompact,
+                        onContinue: showPermissions
+                    )
+                    .transition(.opacity.combined(with: .scale(scale: 0.985)))
+                } else {
+                    PermissionWelcomePage(onContinue: onContinue)
+                        .transition(.move(edge: .trailing).combined(with: .opacity))
+                }
+            }
+            .frame(width: proxy.size.width, height: proxy.size.height)
+            .clipShape(
+                RoundedRectangle(
+                    cornerRadius: isCompact ? 28 : 0,
+                    style: .continuous
+                )
+            )
+            .overlay {
+                RoundedRectangle(
+                    cornerRadius: isCompact ? 28 : 0,
+                    style: .continuous
+                )
+                .strokeBorder(Color.white.opacity(isCompact ? 0.20 : 0), lineWidth: 0.8)
+            }
+        }
+        .ignoresSafeArea()
+        .task { await runOpeningSequence() }
+    }
+
+    @MainActor
+    private func runOpeningSequence() async {
+        guard !hasStartedIntro else { return }
+        hasStartedIntro = true
+
+        if reduceMotion {
+            onRequestCompact(false)
+            isCompact = true
+            revealsHeroText = true
+            return
+        }
+
+        try? await Task.sleep(nanoseconds: 700_000_000)
+        guard !Task.isCancelled else { return }
+
+        onRequestCompact(true)
+        withAnimation(.easeInOut(duration: 1.45)) {
+            isCompact = true
+        }
+
+        try? await Task.sleep(nanoseconds: 560_000_000)
+        guard !Task.isCancelled else { return }
+        revealsHeroText = true
+    }
+
+    private func showPermissions() {
+        if reduceMotion {
+            page = .permissions
+        } else {
+            withAnimation(.spring(response: 0.62, dampingFraction: 0.9)) {
+                page = .permissions
+            }
+        }
+    }
+}
+
+private struct HeroWelcomePage: View {
+    let revealsText: Bool
+    let showsChrome: Bool
+    let onContinue: () -> Void
+
+    var body: some View {
+        ZStack {
+            VStack(spacing: 25) {
+                WaveRevealText(
+                    text: "你的窗口，随心悬浮。",
+                    isRevealed: revealsText
+                )
+
+                Text("PiPanel 将任何窗口变成轻巧、专注的画中画")
+                    .font(.system(size: 15, weight: .medium))
+                    .foregroundStyle(.white.opacity(0.76))
+                    .blur(radius: revealsText ? 0 : 10)
+                    .opacity(revealsText ? 1 : 0)
+                    .offset(y: revealsText ? 0 : 18)
+                    .animation(.easeOut(duration: 0.75).delay(0.35), value: revealsText)
+
+                Button(action: onContinue) {
+                    Image(systemName: "arrow.right")
+                        .font(.system(size: 17, weight: .bold))
+                        .foregroundStyle(Color.arcIndigo)
+                        .frame(width: 62, height: 46)
+                }
+                .buttonStyle(ArcArrowButtonStyle())
+                .blur(radius: revealsText ? 0 : 9)
+                .opacity(revealsText ? 1 : 0)
+                .offset(y: revealsText ? 0 : 16)
+                .animation(.spring(response: 0.6, dampingFraction: 0.86).delay(0.58), value: revealsText)
+            }
+
+            if showsChrome {
+                ArcWindowChrome()
+                    .transition(.opacity)
+            }
+        }
+    }
+}
+
+private struct WaveRevealText: View {
+    let text: String
+    let isRevealed: Bool
+
+    private var characters: [(Int, Character)] {
+        Array(text.enumerated())
+    }
+
+    var body: some View {
+        HStack(spacing: -1.5) {
+            ForEach(characters, id: \.0) { index, character in
+                Text(String(character))
+                    .font(.system(size: 50, weight: .bold, design: .rounded))
+                    .tracking(-1.1)
+                    .foregroundStyle(.white)
+                    .blur(radius: isRevealed ? 0 : 14)
+                    .opacity(isRevealed ? 1 : 0)
+                    .offset(
+                        x: isRevealed ? 0 : CGFloat(sin(Double(index) * 0.9)) * 5,
+                        y: isRevealed ? 0 : 34 + CGFloat(sin(Double(index) * 1.25)) * 13
+                    )
+                    .animation(
+                        .spring(response: 0.72, dampingFraction: 0.82)
+                            .delay(Double(index) * 0.038),
+                        value: isRevealed
+                    )
+            }
+        }
+        .shadow(color: .black.opacity(0.09), radius: 14, y: 8)
+    }
+}
+
+private struct ArcWindowChrome: View {
+    var body: some View {
+        VStack {
+            HStack(spacing: 9) {
+                Circle().fill(.black.opacity(0.12)).frame(width: 12, height: 12)
+                Circle().fill(.black.opacity(0.10)).frame(width: 12, height: 12)
+                Circle().fill(.black.opacity(0.08)).frame(width: 12, height: 12)
+                Spacer()
+            }
+            .padding(.top, 19)
+            .padding(.leading, 20)
+            Spacer()
+        }
+        .allowsHitTesting(false)
+    }
+}
+
+private struct PermissionWelcomePage: View {
+    let onContinue: () -> Void
+
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
+
+    var body: some View {
+        GeometryReader { proxy in
+            ZStack(alignment: .leading) {
+                RefractiveLightField(isExpanded: false, reduceMotion: reduceMotion)
+
+                HStack(spacing: 0) {
+                    Color.clear
+                        .frame(width: proxy.size.width * 0.47)
+
+                    PiPanelVectorShowcase()
+                        .frame(maxWidth: .infinity, maxHeight: .infinity)
+                }
+
+                PermissionSetupPanel(onContinue: onContinue)
+                    .frame(width: proxy.size.width * 0.49, height: proxy.size.height)
+                    .clipShape(WavyTrailingPanelShape())
+            }
+        }
+        .overlay(alignment: .topLeading) {
+            HStack(spacing: 9) {
+                Circle().fill(.red.opacity(0.70)).frame(width: 12, height: 12)
+                Circle().fill(.yellow.opacity(0.70)).frame(width: 12, height: 12)
+                Circle().fill(.green.opacity(0.70)).frame(width: 12, height: 12)
+            }
+            .padding(.top, 19)
+            .padding(.leading, 20)
+        }
+    }
+}
+
+private struct PermissionSetupPanel: View {
+    let onContinue: () -> Void
+
+    @ObservedObject private var permissions = PermissionsManager.shared
+
+    private var canFinish: Bool {
+        permissions.hasAccessibilityAccess
+            && (permissions.hasScreenRecordingAccess || permissions.didRequestScreenRecordingAccess)
+    }
 
     var body: some View {
         VStack(spacing: 0) {
-            stage
-            pageDots
-                .padding(.top, 16)
-            navigationBar
+            Spacer(minLength: 58)
+
+            PiPanelVectorMark()
+                .frame(width: 54, height: 54)
+
+            Text("为 PiPanel 做好准备")
+                .font(.system(size: 28, weight: .bold, design: .rounded))
+                .tracking(-0.5)
                 .padding(.top, 18)
-                .padding(.horizontal, 30)
-                .padding(.bottom, 24)
-        }
-        .frame(width: pageWidth)
-        .background(.ultraThinMaterial)
-        .background(Color.welcomeBackground.opacity(0.6))
-        .clipShape(RoundedRectangle(cornerRadius: 22, style: .continuous))
-        .overlay(
-            RoundedRectangle(cornerRadius: 22, style: .continuous)
-                .strokeBorder(.white.opacity(colorScheme == .dark ? 0.12 : 0.5), lineWidth: 0.75)
-        )
-        .overlay(alignment: .topTrailing) {
-            closeButton.padding(12)
-        }
-        .onAppear {
-            hasEntered = true
-            withAnimation(.easeInOut(duration: 7).repeatForever(autoreverses: true)) {
-                blobsDrifting = true
-            }
-        }
-    }
 
-    private var closeButton: some View {
-        Button(action: onContinue) {
-            Image(systemName: "xmark")
-                .font(.system(size: 10, weight: .semibold))
-        }
-        .buttonStyle(SubtleIconButtonStyle())
-    }
-
-    // MARK: - Stage (banner + paged content)
-
-    private var stage: some View {
-        // Offset math and per-page width are both derived from GeometryReader's *measured*
-        // width rather than the pageWidth constant — a residual left-shift persisted even after
-        // switching to .leading alignment, which points at the rendered width not actually
-        // matching the pageWidth (460) the offset math assumed. Deriving both from the same
-        // measured value makes them self-consistent regardless of what the real width turns out
-        // to be, instead of two numbers that are supposed to agree but aren't guaranteed to.
-        GeometryReader { proxy in
-            let measuredWidth = proxy.size.width
-            ZStack(alignment: .leading) {
-                driftingBlobs(in: proxy.size)
-
-                HStack(spacing: 0) {
-                    demoPage.frame(width: measuredWidth)
-                    startPage.frame(width: measuredWidth)
-                }
-                .frame(height: proxy.size.height)
-                .offset(x: -CGFloat(page.rawValue) * measuredWidth + dragTranslation)
-            }
-        }
-        .frame(width: pageWidth, height: stageHeight)
-        .clipped()
-        .contentShape(Rectangle())
-        .gesture(pagingDragGesture)
-    }
-
-    /// Soft, low-saturation blobs drifting slowly and continuously behind frosted glass — this is
-    /// the "liquid" half of glassmorphism: without something alive moving behind it, a blurred
-    /// material surface has nothing to refract and just reads as a flat tint. Mostly blue plus one
-    /// cool neutral gray, not a multicolor set — matching ChatGPT's restrained, near-monochrome
-    /// use of color instead of reading like a marketing rainbow gradient.
-    private func driftingBlobs(in size: CGSize) -> some View {
-        ZStack {
-            blob(color: .welcomeAccent, size: 240, x: blobsDrifting ? -90 : -130, y: blobsDrifting ? -50 : -20)
-            blob(color: .welcomeAccentSoft, size: 210, x: blobsDrifting ? 110 : 150, y: blobsDrifting ? -30 : -70)
-            blob(color: .welcomeNeutral, size: 220, x: blobsDrifting ? 40 : 80, y: blobsDrifting ? 120 : 90)
-        }
-        .blur(radius: 70)
-        .opacity(colorScheme == .dark ? 0.35 : 0.3)
-        .frame(width: size.width, height: size.height)
-    }
-
-    private func blob(color: Color, size: CGFloat, x: CGFloat, y: CGFloat) -> some View {
-        Circle()
-            .fill(color.gradient)
-            .frame(width: size, height: size)
-            .offset(x: x, y: y)
-    }
-
-    private var pagingDragGesture: some Gesture {
-        DragGesture(minimumDistance: 12)
-            .onChanged { value in
-                // Rubber-band at the ends instead of dragging past them, same as a real page
-                // control — dividing the overshoot down makes it feel like it's resisting rather
-                // than just stopping dead.
-                let raw = value.translation.width
-                let atStart = page == .demo && raw > 0
-                let atEnd = page == .start && raw < 0
-                dragTranslation = (atStart || atEnd) ? raw / 3.5 : raw
-            }
-            .onEnded { value in
-                let threshold: CGFloat = 70
-                if value.translation.width < -threshold, let next = WelcomePage(rawValue: page.rawValue + 1) {
-                    commit(to: next)
-                } else if value.translation.width > threshold, let previous = WelcomePage(rawValue: page.rawValue - 1) {
-                    commit(to: previous)
-                } else {
-                    withAnimation(.spring(response: 0.4, dampingFraction: 0.78)) { dragTranslation = 0 }
-                }
-            }
-    }
-
-    private func commit(to newPage: WelcomePage) {
-        withAnimation(.spring(response: 0.5, dampingFraction: 0.78)) {
-            page = newPage
-            dragTranslation = 0
-        }
-    }
-
-    // MARK: - Page 1: Looping gesture demo
-
-    /// Line 1 (shake-to-shrink) is emphasized for the phases that lead up to and through the
-    /// shrink; line 2 (drag-to-close) takes over once the window is floating and headed for the
-    /// close target — so the caption tracks whichever half of the loop is currently playing,
-    /// rather than only flashing during the single instantaneous shake/drag phase.
-    private var isShakeCaptionActive: Bool {
-        switch demoPhase {
-        case .atRest, .shaking, .shrinking: return true
-        case .floating, .dragging, .closing: return false
-        }
-    }
-
-    private var demoPage: some View {
-        VStack(spacing: 30) {
-            Spacer(minLength: 6)
-            GestureDemoScene(phase: $demoPhase)
-                .frame(width: 300, height: 210)
-            // Font itself (size/weight) is deliberately held fixed and never animated — SwiftUI
-            // doesn't continuously interpolate Font changes on Text the way it does real
-            // transforms, so animating .font(size:weight:) directly snaps at some point
-            // mid-transition instead of tracking the animation curve, which is what read as
-            // "bold and size change happen at different times." Scale (a genuine animatable
-            // transform) does the enlarging instead. Both lines live in a ZStack rather than a
-            // VStack so the offset swap (the big one always on top) is a real position change,
-            // not a structural reorder — reordering two views in a VStack would make SwiftUI
-            // treat it as insert/remove rather than a smooth move.
-            ZStack {
-                Text("抓住窗口用力一甩，立即变成悬浮画中画")
-                    .font(.system(size: 13.5, weight: .semibold))
-                    .foregroundStyle(.primary)
-                    .scaleEffect(isShakeCaptionActive ? 1.28 : 0.82)
-                    .offset(y: isShakeCaptionActive ? -captionSlotOffset : captionSlotOffset)
-                Text("拖到圆圈内松手，即可关闭画中画")
-                    .font(.system(size: 13.5, weight: .semibold))
-                    .foregroundStyle(.primary)
-                    .scaleEffect(isShakeCaptionActive ? 0.82 : 1.28)
-                    .offset(y: isShakeCaptionActive ? captionSlotOffset : -captionSlotOffset)
-            }
-            .frame(height: 50)
-            .animation(.spring(response: 0.22, dampingFraction: 0.68), value: isShakeCaptionActive)
-            .multilineTextAlignment(.center)
-            Spacer(minLength: 6)
-        }
-        .padding(.horizontal, 30)
-    }
-
-    // MARK: - Page 2: Logo, name, start
-
-    private var startPage: some View {
-        VStack(spacing: 0) {
-            Spacer(minLength: 4)
-            WelcomeLogoMark(isVisible: hasEntered)
-                .frame(width: 156, height: 156)
-            Spacer(minLength: 18)
-            Text("PiPanel")
-                .font(.system(size: 28, weight: .semibold, design: .serif))
-                .opacity(hasEntered ? 1 : 0)
-                .offset(y: hasEntered ? 0 : 10)
-                .animation(.easeOut(duration: 0.4).delay(1.15), value: hasEntered)
-            Text("将任意窗口悬浮成画中画")
-                .font(.system(size: 13, weight: .regular))
+            Text("只需两项系统权限，用于读取画面并操作窗口。\nPiPanel 不会保存或上传屏幕内容。")
+                .font(.system(size: 13))
                 .foregroundStyle(.secondary)
-                .padding(.top, 7)
-                .opacity(hasEntered ? 1 : 0)
-                .offset(y: hasEntered ? 0 : 8)
-                .animation(.easeOut(duration: 0.4).delay(1.3), value: hasEntered)
-            Spacer(minLength: 24)
-        }
-    }
+                .multilineTextAlignment(.center)
+                .lineSpacing(4)
+                .padding(.top, 9)
 
-    // MARK: - Page dots
-
-    private var pageDots: some View {
-        HStack(spacing: 7) {
-            ForEach(WelcomePage.allCases, id: \.self) { dot in
-                Capsule()
-                    .fill(dot == page ? Color.welcomeAccent : Color.primary.opacity(0.18))
-                    .frame(width: dot == page ? 18 : 6, height: 6)
-                    .animation(.spring(response: 0.4, dampingFraction: 0.75), value: page)
-                    .onTapGesture { commit(to: dot) }
-            }
-        }
-        .opacity(hasEntered ? 1 : 0)
-        .animation(.easeOut(duration: 0.3).delay(1.3), value: hasEntered)
-    }
-
-    // MARK: - Navigation bar
-
-    private var navigationBar: some View {
-        HStack {
-            if page != .demo {
-                Button("上一步") {
-                    if let previous = WelcomePage(rawValue: page.rawValue - 1) { commit(to: previous) }
+            VStack(spacing: 10) {
+                OnboardingPermissionRow(
+                    icon: "rectangle.inset.filled",
+                    title: "屏幕录制",
+                    detail: permissions.needsRelaunchForScreenRecording
+                        ? "已请求，重启后生效"
+                        : "读取窗口画面",
+                    isGranted: permissions.hasScreenRecordingAccess,
+                    isPending: permissions.needsRelaunchForScreenRecording
+                ) {
+                    permissions.requestScreenRecordingAccess()
+                    permissions.openScreenRecordingSettings()
                 }
+
+                OnboardingPermissionRow(
+                    icon: "hand.point.up.left.fill",
+                    title: "辅助功能",
+                    detail: "定位并操作窗口",
+                    isGranted: permissions.hasAccessibilityAccess,
+                    isPending: false
+                ) {
+                    permissions.requestAccessibilityAccess()
+                    permissions.openAccessibilitySettings()
+                }
+            }
+            .padding(.top, 25)
+            .frame(maxWidth: 370)
+
+            Button(action: onContinue) {
+                HStack(spacing: 7) {
+                    Text("开始使用")
+                    Image(systemName: "arrow.right")
+                        .font(.system(size: 10, weight: .bold))
+                }
+            }
+            .buttonStyle(ArcPrimaryButtonStyle(enabled: canFinish))
+            .disabled(!canFinish)
+            .padding(.top, 22)
+
+            Button("稍后设置", action: onContinue)
                 .buttonStyle(.plain)
-                .font(.system(size: 12.5, weight: .medium))
+                .font(.system(size: 11.5, weight: .medium))
                 .foregroundStyle(.secondary)
-                .transition(.opacity)
+                .padding(.top, 12)
+
+            Spacer(minLength: 38)
+        }
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
+        .padding(.horizontal, 34)
+        .background(Color.arcPanel)
+    }
+}
+
+private struct OnboardingPermissionRow: View {
+    let icon: String
+    let title: String
+    let detail: String
+    let isGranted: Bool
+    let isPending: Bool
+    let action: () -> Void
+
+    var body: some View {
+        HStack(spacing: 12) {
+            Image(systemName: icon)
+                .font(.system(size: 14, weight: .semibold))
+                .foregroundStyle(isGranted ? Color.green : Color.arcIndigo)
+                .frame(width: 34, height: 34)
+                .background {
+                    RoundedRectangle(cornerRadius: 10, style: .continuous)
+                        .fill((isGranted ? Color.green : Color.arcIndigo).opacity(0.10))
+                }
+
+            VStack(alignment: .leading, spacing: 2) {
+                Text(title)
+                    .font(.system(size: 13, weight: .semibold))
+                Text(detail)
+                    .font(.system(size: 10.5))
+                    .foregroundStyle(.secondary)
             }
 
             Spacer()
 
-            primaryButton
-        }
-        .animation(.easeOut(duration: 0.2), value: page)
-    }
-
-    /// The one place this gets the real Liquid Glass material (macOS 26+'s .glassProminent
-    /// button style) rather than an approximation — SwiftUI in this SDK only exposes Liquid Glass
-    /// through button styles, not a general-purpose container modifier.
-    @ViewBuilder
-    private var primaryButton: some View {
-        let label = page == .start ? "开始使用" : "下一步"
-        let action: () -> Void = {
-            if let next = WelcomePage(rawValue: page.rawValue + 1) {
-                commit(to: next)
+            if isGranted {
+                Image(systemName: "checkmark.circle.fill")
+                    .font(.system(size: 18))
+                    .foregroundStyle(.green)
             } else {
-                onContinue()
+                Button(isPending ? "已请求" : "获取权限", action: action)
+                    .buttonStyle(ArcPermissionButtonStyle(isPending: isPending))
             }
         }
-        if #available(macOS 26.0, *) {
-            Button(label, action: action)
-                .buttonStyle(.glassProminent)
-                .tint(.welcomeAccent)
-                .controlSize(.regular)
-        } else {
-            Button(action: action) {
-                Text(label)
-                    .font(.system(size: 13, weight: .medium))
-                    .foregroundStyle(.white)
-                    .padding(.horizontal, 18)
-                    .padding(.vertical, 8)
-            }
-            .buttonStyle(.plain)
-            .background(Capsule().fill(Color.welcomeAccent.gradient))
+        .padding(.horizontal, 14)
+        .frame(height: 62)
+        .background {
+            RoundedRectangle(cornerRadius: 15, style: .continuous)
+                .fill(Color.primary.opacity(0.035))
+        }
+        .overlay {
+            RoundedRectangle(cornerRadius: 15, style: .continuous)
+                .strokeBorder(Color.primary.opacity(0.065), lineWidth: 0.7)
         }
     }
 }
 
-/// The logo's two-square-and-two-dots motif, built from real shapes with a trim-based "drawn by
-/// hand" stroke animation (each rounded-rect outline animates from an empty trim to fully drawn)
-/// rather than a plain scale/fade. Keeps the actual app icon's red/green/blue identity — this is
-/// the one place on the page that stays saturated, everything around it is the muted palette.
-private struct WelcomeLogoMark: View {
-    let isVisible: Bool
+private struct PiPanelVectorShowcase: View {
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
     var body: some View {
-        ZStack(alignment: .topLeading) {
-            HStack(spacing: 7) {
-                Circle().fill(Color.red).frame(width: 13, height: 13)
-                Circle().fill(Color.green).frame(width: 13, height: 13)
+        TimelineView(.animation(minimumInterval: 1.0 / 60.0, paused: reduceMotion)) { context in
+            let time = context.date.timeIntervalSinceReferenceDate
+            let raw = (sin(time * 0.72 - .pi / 2) + 1) / 2
+            let progress = reduceMotion ? 0.72 : smoothStep(raw)
+
+            VStack(spacing: 21) {
+                VStack(spacing: 6) {
+                    Text("一甩，即刻悬浮")
+                        .font(.system(size: 27, weight: .bold, design: .rounded))
+                        .foregroundStyle(.white)
+                    Text("窗口从桌面轻盈地来到你身边")
+                        .font(.system(size: 13))
+                        .foregroundStyle(.white.opacity(0.68))
+                }
+
+                ZStack {
+                    VectorDesktopWindow()
+                        .frame(width: 430, height: 280)
+
+                    FlightArc()
+                        .trim(from: 0, to: progress)
+                        .stroke(
+                            Color.white.opacity(0.34),
+                            style: StrokeStyle(lineWidth: 1.4, lineCap: .round, dash: [5, 7])
+                        )
+                        .frame(width: 300, height: 170)
+
+                    VectorPiPWindow()
+                        .frame(
+                            width: mix(126, 192, progress),
+                            height: mix(78, 118, progress)
+                        )
+                        .rotationEffect(.degrees(mix(-4, 1.5, progress)))
+                        .offset(
+                            x: mix(-58, 164, progress),
+                            y: mix(22, -103, progress)
+                        )
+                        .shadow(color: .black.opacity(0.20), radius: 16, y: 10)
+                }
+                .frame(width: 560, height: 360)
             }
-            .padding(.leading, 6)
-            .padding(.top, 2)
-            .scaleEffect(isVisible ? 1 : 0.3)
-            .opacity(isVisible ? 1 : 0)
-            .animation(.spring(response: 0.4, dampingFraction: 0.6).delay(0.35), value: isVisible)
-
-            RoundedRectangle(cornerRadius: 24, style: .continuous)
-                .trim(from: 0, to: isVisible ? 1 : 0)
-                .stroke(
-                    LinearGradient(colors: [.red, .green], startPoint: .topLeading, endPoint: .bottomTrailing),
-                    style: StrokeStyle(lineWidth: 13, lineCap: .round, lineJoin: .round)
-                )
-                .frame(width: 126, height: 106)
-                .offset(x: 8, y: 30)
-                .animation(.easeInOut(duration: 1.0), value: isVisible)
-
-            RoundedRectangle(cornerRadius: 16, style: .continuous)
-                .trim(from: 0, to: isVisible ? 1 : 0)
-                .stroke(
-                    LinearGradient(colors: [.blue.opacity(0.7), .cyan], startPoint: .topLeading, endPoint: .bottomTrailing),
-                    style: StrokeStyle(lineWidth: 12, lineCap: .round, lineJoin: .round)
-                )
-                .frame(width: 80, height: 68)
-                .offset(x: 60, y: 74)
-                .animation(.easeInOut(duration: 0.9).delay(0.5), value: isVisible)
+            .padding(.leading, 12)
         }
     }
 }
 
-/// A small looping vector illustration demonstrating the app's two core gestures: grab-and-shake
-/// a window to shrink it into a floating PiP, then drag that floating window onto a circular
-/// target to close it. Runs continuously via `.task`, which SwiftUI auto-cancels when the view
-/// leaves the hierarchy — no manual Timer bookkeeping needed. Each phase transition is a plain
-/// state mutation; the visual animation comes entirely from declarative `.animation(value:)`
-/// modifiers below, same reasoning as the rest of this file.
-private struct GestureDemoScene: View {
-    @Binding var phase: DemoPhase
-    @State private var shakeAngle: Double = 0
-
-    private var windowScale: CGFloat {
-        switch phase {
-        case .atRest, .shaking: return 1
-        case .shrinking, .floating, .dragging: return 0.34
-        case .closing: return 0.05
-        }
-    }
-
-    private var windowOffset: CGSize {
-        switch phase {
-        case .atRest, .shaking: return CGSize(width: 0, height: -30)
-        case .shrinking, .floating: return CGSize(width: 95, height: 40)
-        case .dragging, .closing: return CGSize(width: 0, height: 68)
-        }
-    }
-
-    private var windowOpacity: Double {
-        phase == .closing ? 0 : 1
-    }
-
-    private var closeZoneVisible: Bool {
-        switch phase {
-        case .atRest, .shaking, .shrinking: return false
-        case .floating, .dragging, .closing: return true
-        }
-    }
-
-    private var closeZoneHighlighted: Bool {
-        phase == .dragging || phase == .closing
-    }
-
-    var body: some View {
-        ZStack {
-            closeZoneCircle
-                .opacity(closeZoneVisible ? 1 : 0)
-                .scaleEffect(closeZoneHighlighted ? 1.18 : 1)
-                .animation(.spring(response: 0.4, dampingFraction: 0.7), value: phase)
-
-            MockWindow()
-                .frame(width: 170, height: 110)
-                .rotationEffect(.degrees(shakeAngle))
-                .animation(.easeInOut(duration: 0.08).repeatCount(8, autoreverses: true), value: shakeAngle)
-                .scaleEffect(windowScale)
-                .offset(windowOffset)
-                .opacity(windowOpacity)
-                .animation(.spring(response: 0.5, dampingFraction: 0.72), value: phase)
-        }
-        .task { await runLoop() }
-    }
-
-    private var closeZoneCircle: some View {
-        ZStack {
-            Circle()
-                .fill(.regularMaterial)
-                .frame(width: 52, height: 52)
-            Circle()
-                .strokeBorder(closeZoneHighlighted ? Color.red.opacity(0.6) : Color.primary.opacity(0.2), lineWidth: 1.5)
-                .frame(width: 52, height: 52)
-            Image(systemName: "xmark")
-                .font(.system(size: 13, weight: .semibold))
-                .foregroundStyle(closeZoneHighlighted ? .red : .secondary)
-        }
-        .offset(y: 68)
-    }
-
-    private func runLoop() async {
-        while !Task.isCancelled {
-            phase = .atRest
-            shakeAngle = 0
-            try? await Task.sleep(nanoseconds: 700_000_000)
-            guard !Task.isCancelled else { return }
-
-            phase = .shaking
-            shakeAngle = 7
-            try? await Task.sleep(nanoseconds: 1_400_000_000)
-            guard !Task.isCancelled else { return }
-            shakeAngle = 0
-
-            phase = .shrinking
-            try? await Task.sleep(nanoseconds: 650_000_000)
-            guard !Task.isCancelled else { return }
-
-            phase = .floating
-            try? await Task.sleep(nanoseconds: 950_000_000)
-            guard !Task.isCancelled else { return }
-
-            phase = .dragging
-            try? await Task.sleep(nanoseconds: 700_000_000)
-            guard !Task.isCancelled else { return }
-
-            phase = .closing
-            try? await Task.sleep(nanoseconds: 550_000_000)
-            guard !Task.isCancelled else { return }
-        }
-    }
-}
-
-/// A generic little app-window mockup (traffic lights included — this is illustrative content
-/// standing in for *some other app's* window being converted, not this welcome window's own
-/// chrome, which deliberately has none).
-private struct MockWindow: View {
+private struct VectorDesktopWindow: View {
     var body: some View {
         VStack(spacing: 0) {
-            HStack(spacing: 5) {
-                Circle().fill(Color.red.opacity(0.65)).frame(width: 6, height: 6)
-                Circle().fill(Color.yellow.opacity(0.65)).frame(width: 6, height: 6)
-                Circle().fill(Color.green.opacity(0.65)).frame(width: 6, height: 6)
-                Spacer(minLength: 0)
+            HStack(spacing: 7) {
+                Circle().fill(.white.opacity(0.52)).frame(width: 8, height: 8)
+                Circle().fill(.white.opacity(0.40)).frame(width: 8, height: 8)
+                Circle().fill(.white.opacity(0.30)).frame(width: 8, height: 8)
+                Spacer()
+                Capsule().fill(.white.opacity(0.12)).frame(width: 120, height: 13)
+                Spacer()
             }
-            .padding(.horizontal, 8)
-            .padding(.vertical, 6)
-            .background(Color.primary.opacity(0.06))
+            .padding(.horizontal, 15)
+            .frame(height: 38)
+            .background(.white.opacity(0.08))
 
-            Rectangle()
-                .fill(Color.welcomeAccent.opacity(0.12))
+            HStack(spacing: 0) {
+                VStack(spacing: 14) {
+                    ForEach(0..<4, id: \.self) { index in
+                        RoundedRectangle(cornerRadius: 5)
+                            .fill(.white.opacity(index == 1 ? 0.24 : 0.09))
+                            .frame(height: 24)
+                    }
+                    Spacer()
+                }
+                .padding(13)
+                .frame(width: 105)
+                .background(.black.opacity(0.07))
+
+                LazyVGrid(columns: [.init(), .init()], spacing: 10) {
+                    ForEach(0..<4, id: \.self) { index in
+                        RoundedRectangle(cornerRadius: 9, style: .continuous)
+                            .fill(.white.opacity(index == 0 ? 0.20 : 0.095))
+                            .frame(height: 92)
+                    }
+                }
+                .padding(14)
+            }
         }
-        .clipShape(RoundedRectangle(cornerRadius: 10, style: .continuous))
-        .overlay(
-            RoundedRectangle(cornerRadius: 10, style: .continuous)
-                .strokeBorder(.white.opacity(0.3), lineWidth: 0.5)
-        )
-        .shadow(color: .black.opacity(0.15), radius: 8, y: 4)
+        .background(.ultraThinMaterial.opacity(0.34))
+        .clipShape(RoundedRectangle(cornerRadius: 18, style: .continuous))
+        .overlay {
+            RoundedRectangle(cornerRadius: 18, style: .continuous)
+                .strokeBorder(.white.opacity(0.26), lineWidth: 1)
+        }
     }
 }
 
-/// A small, neutral, "ChatGPT-like" palette — cool near-grayscale surfaces (not warm paper tones)
-/// with a single blue accent doing almost all of the color work, rather than the user's system
-/// accent color (which could be anything from purple to pink and wouldn't read as an intentional
-/// brand choice here). Built with a dynamic NSColor provider so each stays correct across
-/// Light/Dark Mode without needing separate call sites for each appearance.
-private extension Color {
-    /// A clean, modern blue, lightened slightly for dark mode so it still pops against a
-    /// near-black background instead of going muddy.
-    static let welcomeAccent = Color.adaptive(
-        light: Color(red: 0.145, green: 0.388, blue: 0.922),
-        dark: Color(red: 0.408, green: 0.596, blue: 0.976)
-    )
-    static let welcomeAccentSoft = Color.adaptive(
-        light: Color(red: 0.376, green: 0.576, blue: 0.965),
-        dark: Color(red: 0.573, green: 0.729, blue: 0.988)
-    )
-    /// A cool neutral gray rather than a second hue — this palette stays close to grayscale and
-    /// leans on the one accent color, so this is here for variety in the background blobs without
-    /// competing with welcomeAccent for attention.
-    static let welcomeNeutral = Color.adaptive(
-        light: Color(red: 0.573, green: 0.612, blue: 0.647),
-        dark: Color(red: 0.463, green: 0.502, blue: 0.541)
-    )
-    static let welcomeBackground = Color.adaptive(
-        light: Color(red: 0.968, green: 0.968, blue: 0.973),
-        dark: Color(red: 0.129, green: 0.133, blue: 0.141)
-    )
-
-    static func adaptive(light: Color, dark: Color) -> Color {
-        Color(nsColor: NSColor(name: nil) { appearance in
-            appearance.bestMatch(from: [.aqua, .darkAqua]) == .darkAqua ? NSColor(dark) : NSColor(light)
-        })
+private struct VectorPiPWindow: View {
+    var body: some View {
+        ZStack {
+            RoundedRectangle(cornerRadius: 14, style: .continuous)
+                .fill(.ultraThinMaterial)
+            LinearGradient(
+                colors: [.white.opacity(0.28), .white.opacity(0.08)],
+                startPoint: .topLeading,
+                endPoint: .bottomTrailing
+            )
+            PiPanelVectorMark(strokeColor: .white)
+                .padding(24)
+        }
+        .clipShape(RoundedRectangle(cornerRadius: 14, style: .continuous))
+        .overlay {
+            RoundedRectangle(cornerRadius: 14, style: .continuous)
+                .strokeBorder(.white.opacity(0.48), lineWidth: 1.1)
+        }
     }
+}
+
+private struct PiPanelVectorMark: View {
+    var strokeColor: Color = .arcIndigo
+
+    @State private var draws = false
+
+    var body: some View {
+        ZStack {
+            RoundedRectangle(cornerRadius: 12, style: .continuous)
+                .trim(from: 0, to: draws ? 1 : 0.02)
+                .stroke(strokeColor, style: StrokeStyle(lineWidth: 4.5, lineCap: .round))
+                .frame(width: 42, height: 34)
+                .offset(x: -4, y: -4)
+
+            RoundedRectangle(cornerRadius: 8, style: .continuous)
+                .trim(from: 0, to: draws ? 1 : 0.02)
+                .stroke(strokeColor.opacity(0.72), style: StrokeStyle(lineWidth: 4, lineCap: .round))
+                .frame(width: 29, height: 23)
+                .offset(x: 9, y: 9)
+        }
+        .onAppear {
+            withAnimation(.easeInOut(duration: 1.15).repeatForever(autoreverses: true)) {
+                draws = true
+            }
+        }
+    }
+}
+
+private struct WavyTrailingPanelShape: Shape {
+    func path(in rect: CGRect) -> Path {
+        var path = Path()
+        path.move(to: CGPoint(x: 0, y: 0))
+        path.addLine(to: CGPoint(x: rect.width - 14, y: 0))
+
+        let step: CGFloat = 18
+        var y: CGFloat = 0
+        while y <= rect.height {
+            let x = rect.width - 14 + sin(y / step * .pi) * 5.5
+            path.addLine(to: CGPoint(x: x, y: y))
+            y += 4
+        }
+
+        path.addLine(to: CGPoint(x: 0, y: rect.height))
+        path.closeSubpath()
+        return path
+    }
+}
+
+private struct FlightArc: Shape {
+    func path(in rect: CGRect) -> Path {
+        var path = Path()
+        path.move(to: CGPoint(x: rect.minX + 45, y: rect.maxY - 30))
+        path.addCurve(
+            to: CGPoint(x: rect.maxX - 25, y: rect.minY + 28),
+            control1: CGPoint(x: rect.midX - 40, y: rect.maxY + 8),
+            control2: CGPoint(x: rect.midX + 28, y: rect.minY - 18)
+        )
+        return path
+    }
+}
+
+private struct RefractiveLightField: View {
+    let isExpanded: Bool
+    let reduceMotion: Bool
+
+    var body: some View {
+        TimelineView(.animation(minimumInterval: 1.0 / 60.0, paused: reduceMotion)) { context in
+            let time = reduceMotion ? 0 : context.date.timeIntervalSinceReferenceDate
+
+            Canvas(rendersAsynchronously: true) { graphics, size in
+                graphics.fill(
+                    Path(CGRect(origin: .zero, size: size)),
+                    with: .linearGradient(
+                        Gradient(colors: [Color.arcDeepBlue, Color.arcIndigo, Color.arcSky]),
+                        startPoint: .zero,
+                        endPoint: CGPoint(x: size.width, y: size.height)
+                    )
+                )
+
+                graphics.blendMode = .plusLighter
+                for index in 0..<7 {
+                    let phase = time * (0.22 + Double(index) * 0.025) + Double(index) * 0.9
+                    let center = CGPoint(
+                        x: size.width * (0.5 + cos(phase) * (isExpanded ? 0.24 : 0.16)),
+                        y: size.height * (0.5 + sin(phase * 1.17) * (isExpanded ? 0.27 : 0.18))
+                    )
+                    let diameter = min(size.width, size.height)
+                        * (isExpanded ? 0.62 : 0.52)
+                        * (0.72 + CGFloat(index) * 0.07)
+                    let rect = CGRect(
+                        x: center.x - diameter / 2,
+                        y: center.y - diameter / 2,
+                        width: diameter * (1 + 0.13 * sin(phase * 1.4)),
+                        height: diameter * (1 + 0.16 * cos(phase * 1.1))
+                    )
+                    let path = LiquidOrbPath.make(in: rect, phase: phase, lobes: 6 + index)
+                    graphics.fill(
+                        path,
+                        with: .radialGradient(
+                            Gradient(colors: [
+                                Color.white.opacity(index.isMultiple(of: 2) ? 0.24 : 0.12),
+                                Color.arcViolet.opacity(0.12),
+                                Color.clear
+                            ]),
+                            center: center,
+                            startRadius: 0,
+                            endRadius: diameter * 0.58
+                        )
+                    )
+                }
+            }
+            .blur(radius: isExpanded ? 22 : 34)
+            .scaleEffect(isExpanded ? 1.13 : 1)
+            .overlay {
+                RadialGradient(
+                    colors: [.white.opacity(isExpanded ? 0.15 : 0.07), .clear],
+                    center: .center,
+                    startRadius: 0,
+                    endRadius: 520
+                )
+                .blendMode(.screen)
+            }
+        }
+        .background(Color.arcDeepBlue)
+        .animation(.easeInOut(duration: 1.45), value: isExpanded)
+    }
+}
+
+private enum LiquidOrbPath {
+    static func make(in rect: CGRect, phase: Double, lobes: Int) -> Path {
+        var path = Path()
+        let center = CGPoint(x: rect.midX, y: rect.midY)
+        let radiusX = rect.width / 2
+        let radiusY = rect.height / 2
+        let points = 96
+
+        for index in 0...points {
+            let angle = Double(index) / Double(points) * .pi * 2
+            let distortion = 1
+                + sin(angle * Double(lobes) + phase * 1.7) * 0.055
+                + cos(angle * 3 - phase) * 0.035
+            let point = CGPoint(
+                x: center.x + cos(angle) * radiusX * distortion,
+                y: center.y + sin(angle) * radiusY * distortion
+            )
+            if index == 0 { path.move(to: point) } else { path.addLine(to: point) }
+        }
+        path.closeSubpath()
+        return path
+    }
+}
+
+private struct ArcArrowButtonStyle: ButtonStyle {
+    func makeBody(configuration: Configuration) -> some View {
+        configuration.label
+            .background {
+                RoundedRectangle(cornerRadius: 13, style: .continuous)
+                    .fill(.white.opacity(configuration.isPressed ? 0.76 : 0.92))
+            }
+            .shadow(color: .black.opacity(0.12), radius: 12, y: 7)
+            .scaleEffect(configuration.isPressed ? 0.95 : 1)
+            .animation(.easeOut(duration: 0.14), value: configuration.isPressed)
+    }
+}
+
+private struct ArcPermissionButtonStyle: ButtonStyle {
+    let isPending: Bool
+
+    func makeBody(configuration: Configuration) -> some View {
+        configuration.label
+            .font(.system(size: 10.5, weight: .semibold))
+            .foregroundStyle(isPending ? Color.secondary : Color.white)
+            .padding(.horizontal, 11)
+            .frame(height: 28)
+            .background {
+                Capsule().fill(
+                    isPending
+                        ? Color.primary.opacity(0.07)
+                        : Color.arcIndigo.opacity(configuration.isPressed ? 0.78 : 1)
+                )
+            }
+    }
+}
+
+private struct ArcPrimaryButtonStyle: ButtonStyle {
+    let enabled: Bool
+
+    func makeBody(configuration: Configuration) -> some View {
+        configuration.label
+            .font(.system(size: 13, weight: .semibold))
+            .foregroundStyle(.white)
+            .frame(width: 220, height: 42)
+            .background {
+                RoundedRectangle(cornerRadius: 12, style: .continuous)
+                    .fill(Color.arcIndigo.opacity(enabled ? (configuration.isPressed ? 0.78 : 1) : 0.34))
+            }
+            .scaleEffect(configuration.isPressed && enabled ? 0.98 : 1)
+    }
+}
+
+private func smoothStep(_ value: Double) -> CGFloat {
+    let clamped = max(0, min(1, value))
+    return CGFloat(clamped * clamped * (3 - 2 * clamped))
+}
+
+private func mix(_ start: CGFloat, _ end: CGFloat, _ progress: CGFloat) -> CGFloat {
+    start + (end - start) * progress
+}
+
+private extension Color {
+    static let arcDeepBlue = Color(red: 0.07, green: 0.10, blue: 0.72)
+    static let arcIndigo = Color(red: 0.20, green: 0.24, blue: 0.98)
+    static let arcSky = Color(red: 0.35, green: 0.65, blue: 1.0)
+    static let arcViolet = Color(red: 0.56, green: 0.31, blue: 1.0)
+    static let arcPanel = Color(nsColor: NSColor(name: nil) { appearance in
+        appearance.bestMatch(from: [.aqua, .darkAqua]) == .darkAqua
+            ? NSColor(red: 0.09, green: 0.09, blue: 0.11, alpha: 1)
+            : NSColor(red: 0.985, green: 0.985, blue: 0.99, alpha: 1)
+    })
 }
 
 #Preview {
-    WelcomeView(onContinue: {})
+    WelcomeView(onRequestCompact: { _ in }, onContinue: {})
+        .frame(width: 1120, height: 700)
 }

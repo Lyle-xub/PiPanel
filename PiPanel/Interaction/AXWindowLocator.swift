@@ -8,7 +8,18 @@ import AppKit
 /// the entry whose title and on-screen frame line up with what ScreenCaptureKit reported.
 enum AXWindowLocator {
     static func locate(_ windowInfo: WindowInfo) -> AXUIElement? {
-        let appElement = AXUIElementCreateApplication(windowInfo.ownerPID)
+        locate(
+            ownerPID: windowInfo.ownerPID,
+            approximateFrame: windowInfo.frame,
+            title: windowInfo.title
+        )
+    }
+
+    /// Locates an arbitrary application's window without requiring an SCWindow. The virtual-
+    /// display intrusion guard gets its cheap first-pass snapshots from CGWindowList, then uses
+    /// this overload only for the rare window that actually appears inside a managed display.
+    static func locate(ownerPID: pid_t, approximateFrame: CGRect, title: String?) -> AXUIElement? {
+        let appElement = AXUIElementCreateApplication(ownerPID)
         var windowsValue: CFTypeRef?
         let result = AXUIElementCopyAttributeValue(appElement, kAXWindowsAttribute as CFString, &windowsValue)
         guard result == .success, let windows = windowsValue as? [AXUIElement] else { return nil }
@@ -16,10 +27,10 @@ enum AXWindowLocator {
         var bestMatch: (element: AXUIElement, score: CGFloat)?
         for window in windows {
             guard let frame = frame(of: window) else { continue }
-            let distance = abs(frame.origin.x - windowInfo.frame.origin.x)
-                + abs(frame.origin.y - windowInfo.frame.origin.y)
-                + abs(frame.width - windowInfo.frame.width)
-                + abs(frame.height - windowInfo.frame.height)
+            let distance = abs(frame.origin.x - approximateFrame.origin.x)
+                + abs(frame.origin.y - approximateFrame.origin.y)
+                + abs(frame.width - approximateFrame.width)
+                + abs(frame.height - approximateFrame.height)
             if bestMatch == nil || distance < bestMatch!.score {
                 bestMatch = (window, distance)
             }
@@ -31,13 +42,52 @@ enum AXWindowLocator {
             return bestMatch.element
         }
         // Fall back to title match if frame drifted more than tolerance (e.g. window mid-animation).
-        return windows.first { titleMatches($0, windowInfo.title) }
+        guard let title, !title.isEmpty else { return nil }
+        return windows.first { titleMatches($0, title) }
     }
 
     static func frame(of window: AXUIElement) -> CGRect? {
         guard let origin = point(window, kAXPositionAttribute),
               let size = size(window, kAXSizeAttribute) else { return nil }
         return CGRect(origin: origin, size: size)
+    }
+
+    static func title(of window: AXUIElement) -> String? {
+        var value: CFTypeRef?
+        guard AXUIElementCopyAttributeValue(window, kAXTitleAttribute as CFString, &value) == .success else {
+            return nil
+        }
+        return value as? String
+    }
+
+    /// "AXFullScreen" isn't among ApplicationServices' published kAX*Attribute constants, but it's
+    /// the conventional (if undocumented) boolean attribute apps that support native macOS
+    /// fullscreen expose — used here by PiPSessionManager.pipAllEligibleWindows to skip windows
+    /// already fullscreen (PiP-ing a fullscreen window's own Space doesn't make sense the way it
+    /// does for a normal windowed one). An app that doesn't support fullscreen at all, or doesn't
+    /// expose this attribute, reads as false here — treated as "not fullscreen" (eligible), which
+    /// is the correct default for a window there's simply no fullscreen state to check.
+    static func isFullScreen(_ window: AXUIElement) -> Bool {
+        var value: CFTypeRef?
+        guard AXUIElementCopyAttributeValue(window, "AXFullScreen" as CFString, &value) == .success else {
+            return false
+        }
+        return (value as? Bool) ?? false
+    }
+
+    /// kAXMinimizedAttribute, unlike AXFullScreen above, *is* a standard published attribute — used
+    /// alongside isFullScreen by PiPSessionManager.pipAllEligibleWindows to skip minimized windows
+    /// too. WindowEnumerator's own candidate list can still include a minimized window (it
+    /// deliberately passes onScreenWindowsOnly: false so windows on other/full-screen Spaces are
+    /// included, and a minimized window is "off-screen" for the same reason a Space-switched one
+    /// is) — PiP-ing a window the user just explicitly tucked away into the Dock would immediately
+    /// un-tuck it back onto a virtual display, working against what minimizing it was for.
+    static func isMinimized(_ window: AXUIElement) -> Bool {
+        var value: CFTypeRef?
+        guard AXUIElementCopyAttributeValue(window, kAXMinimizedAttribute as CFString, &value) == .success else {
+            return false
+        }
+        return (value as? Bool) ?? false
     }
 
     static func setFrame(_ frame: CGRect, on window: AXUIElement) {
@@ -77,10 +127,7 @@ enum AXWindowLocator {
     }
 
     private static func titleMatches(_ window: AXUIElement, _ title: String) -> Bool {
-        var value: CFTypeRef?
-        guard AXUIElementCopyAttributeValue(window, kAXTitleAttribute as CFString, &value) == .success,
-              let axTitle = value as? String else { return false }
-        return axTitle == title
+        self.title(of: window) == title
     }
 
     private static func point(_ element: AXUIElement, _ attribute: String) -> CGPoint? {
