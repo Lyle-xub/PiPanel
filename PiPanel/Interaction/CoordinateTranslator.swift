@@ -31,7 +31,9 @@ enum CoordinateTranslator {
     /// - Parameters:
     ///   - localPoint: click location in the video view's own bounds (AppKit space).
     ///   - viewBounds: the video view's bounds.
-    ///   - nativeSize: the captured window's actual size (CaptureSession.framedRect.size).
+    ///   - nativeSize: the displayed sample's aspect-ratio size. It may be briefly stale while a
+    ///     new ScreenCaptureKit crop is taking effect, so global distances come from
+    ///     windowGlobalFrame rather than trusting this value.
     ///   - windowGlobalFrame: the source window's current on-screen frame (Quartz space, e.g.
     ///     from AXWindowLocator.frame — top-left origin), on whichever display it currently sits.
     /// - Returns: nil if the point falls in the video's letterbox bars (outside the actual
@@ -39,7 +41,7 @@ enum CoordinateTranslator {
     static func globalPoint(
         forLocalPoint localPoint: CGPoint,
         viewBounds: CGRect,
-        nativeSize: CGSize,
+        nativeSize _: CGSize,
         displayedVideoRect: CGRect,
         windowGlobalFrame: CGRect
     ) -> CGPoint? {
@@ -50,8 +52,8 @@ enum CoordinateTranslator {
         let fracYFromBottom = (localPoint.y - displayedVideoRect.minY) / displayedVideoRect.height
         let fracYFromTop = 1 - fracYFromBottom
 
-        let windowLocalX = fracX * nativeSize.width
-        let windowLocalY = fracYFromTop * nativeSize.height
+        let windowLocalX = fracX * windowGlobalFrame.width
+        let windowLocalY = fracYFromTop * windowGlobalFrame.height
 
         return CGPoint(
             x: windowGlobalFrame.origin.x + windowLocalX,

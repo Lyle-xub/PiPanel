@@ -1,5 +1,4 @@
 import AppKit
-import CoreMedia
 import Combine
 
 /// Captures where a newly-created panel belongs relative to its physical screen's visible area.
@@ -122,6 +121,17 @@ final class PiPSessionManager: NSObject, ObservableObject {
     }
 
     private var sessionsByCaptureSession: [ObjectIdentifier: PiPSession] = [:]
+    /// Keep a closing session registered until its source has actually returned to a physical
+    /// display. Otherwise the intrusion guard can mistake that still-restoring source for an
+    /// unrelated window and move it to a generic recovery frame.
+    private var stoppingSessionIDs: Set<PiPSession.ID> = []
+    /// Gives application termination a structured handle to the same asynchronous cleanup used by
+    /// ordinary close actions. Without retaining these tasks, AppDelegate could only request
+    /// stopAll() and guess when every source window had actually returned from its virtual display.
+    private var stoppingTasks: [PiPSession.ID: Task<Void, Never>] = [:]
+    /// Set before application termination starts. Pending pool warm-up callbacks and user gestures
+    /// must not create a fresh PiP after the shutdown snapshot has already been collected.
+    private var isPreparingForTermination = false
     /// A shake can produce another valid gesture before the first asynchronous virtual-display
     /// startup has finished. WindowServer may also assign a fresh SCWindowID while the window is
     /// moving, so sessions' ID-only duplicate check is insufficient during that gap.
@@ -258,6 +268,19 @@ final class PiPSessionManager: NSObject, ObservableObject {
             // virtual display. Everything else — including another window from the same PID — is
             // an intrusion and must be returned to a physical screen.
             if sessions.contains(where: { $0.captureSession.ownsSourceWindow(axWindow) }) {
+                continue
+            }
+
+            // Native fullscreen commonly creates a second WindowServer/AX window for the same
+            // application rather than reusing the original source element. It fills the private
+            // display in raw backing pixels (for example 2560×1600 on a 1280×800 2× host), so an
+            // identity-only check mistakes it for an unrelated intrusion and drags it away. A
+            // fullscreen window from the active source PID is the session's intended companion.
+            if sessions.contains(where: {
+                $0.windowInfo.ownerPID == snapshot.ownerPID
+                    && (AXWindowLocator.isFullScreen(axWindow)
+                        || $0.captureSession.sourceIsNativeFullScreen())
+            }) {
                 continue
             }
 
@@ -456,6 +479,7 @@ final class PiPSessionManager: NSObject, ObservableObject {
     }
 
     func startSession(for windowInfo: WindowInfo) {
+        guard !isPreparingForTermination else { return }
         debugTrace("startSession(for:) called id=\(windowInfo.id) pid=\(windowInfo.ownerPID) frame=\(windowInfo.frame) for \(windowInfo.ownerAppName)/\(windowInfo.title)")
         if sessions.contains(where: { Self.representsSameSource($0.windowInfo, windowInfo) }) {
             PiPanelLogger.app.info("Session already active for window \(windowInfo.id)")
@@ -484,6 +508,10 @@ final class PiPSessionManager: NSObject, ObservableObject {
     }
 
     private func startPreparedSession(for originalWindowInfo: WindowInfo) {
+        guard !isPreparingForTermination else {
+            startingSourcePIDs.remove(originalWindowInfo.ownerPID)
+            return
+        }
         guard startingSourcePIDs.contains(originalWindowInfo.ownerPID) else { return }
         guard !sessions.contains(where: { Self.representsSameSource($0.windowInfo, originalWindowInfo) }) else {
             startingSourcePIDs.remove(originalWindowInfo.ownerPID)
@@ -532,12 +560,17 @@ final class PiPSessionManager: NSObject, ObservableObject {
         panelController.delegate = self
         debugTrace("panel created and ordered front")
 
-        let captureSession = CaptureSession(windowInfo: windowInfo)
+        let framePresenter = LatestVideoFramePresenter(panelController: panelController)
+        let captureSession = CaptureSession(windowInfo: windowInfo, framePresenter: framePresenter)
         captureSession.delegate = self
         captureSession.targetFPS = SettingsStore.shared.targetFPS
-        captureSession.sourceDisplayMaximumFPS = DisplayRefreshRate.fps(for: sourceScreen)
+        captureSession.captureDisplayMaximumFPS = DisplayRefreshRate.maximumPhysicalFPS()
+        captureSession.presentationDisplayMaximumFPS = DisplayRefreshRate.fps(for: sourceScreen)
         captureSession.virtualDisplayLongEdge = SettingsStore.shared.virtualDisplayLongEdge
         captureSession.maxOutputLongEdge = CGFloat(SettingsStore.shared.captureOutputLongEdge)
+        panelController.onPresentationDisplayMaximumFPSChanged = { [weak captureSession] fps in
+            captureSession?.presentationDisplayMaximumFPS = fps
+        }
 
         let interactionForwarder = InteractionForwarder(captureSession: captureSession)
         interactionForwarder.autoReturnEnabled = SettingsStore.shared.autoReturnEnabled
@@ -578,17 +611,41 @@ final class PiPSessionManager: NSObject, ObservableObject {
     }
 
     func stopSession(_ session: PiPSession) {
-        guard sessions.contains(where: { $0.id == session.id }) else { return }
-        sessions.removeAll { $0.id == session.id }
-        sessionsByCaptureSession.removeValue(forKey: ObjectIdentifier(session.captureSession))
+        _ = stopTask(for: session)
+    }
+
+    @discardableResult
+    private func stopTask(for session: PiPSession) -> Task<Void, Never>? {
+        if let existing = stoppingTasks[session.id] { return existing }
+        guard sessions.contains(where: { $0.id == session.id }),
+              stoppingSessionIDs.insert(session.id).inserted else { return nil }
         session.panelController.close()
-        Task {
+        let task = Task { @MainActor [weak self] in
             await session.captureSession.stop()
+            guard let self else { return }
+            self.sessions.removeAll { $0.id == session.id }
+            self.sessionsByCaptureSession.removeValue(forKey: ObjectIdentifier(session.captureSession))
+            self.stoppingSessionIDs.remove(session.id)
+            self.stoppingTasks.removeValue(forKey: session.id)
         }
+        stoppingTasks[session.id] = task
+        return task
     }
 
     func stopAll() {
         for session in sessions { stopSession(session) }
+    }
+
+    /// Used by AppDelegate's terminate-later handshake. It prevents new sessions, cancels pending
+    /// pre-session preparation, and does not return until every CaptureSession.stop() has restored
+    /// its source window and released its virtual display lease.
+    func stopAllAndWaitForWindowRestoration() async {
+        isPreparingForTermination = true
+        startingSourcePIDs.removeAll()
+        let tasks = sessions.compactMap { stopTask(for: $0) }
+        for task in tasks {
+            await task.value
+        }
     }
 
     /// Turns every eligible window — not already a PiP session, not minimized, not fullscreen
@@ -946,14 +1003,6 @@ extension PiPSessionManager: EdgeHandleWindowDelegate {
 }
 
 extension PiPSessionManager: CaptureSessionDelegate {
-    nonisolated func captureSession(_ session: CaptureSession, didOutput sampleBuffer: CMSampleBuffer) {
-        Task { @MainActor in
-            guard let pipSession = self.sessionsByCaptureSession[ObjectIdentifier(session)] else { return }
-            let nativeSize = session.framedRect.size
-            pipSession.panelController.enqueue(sampleBuffer, nativeSize: nativeSize.width > 0 ? nativeSize : session.windowInfo.frame.size)
-        }
-    }
-
     nonisolated func captureSessionDidStop(_ session: CaptureSession, error: Error?) {
         Task { @MainActor in
             guard let pipSession = self.sessionsByCaptureSession[ObjectIdentifier(session)] else { return }

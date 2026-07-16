@@ -2,6 +2,69 @@ import AppKit
 import AVFoundation
 import CoreMedia
 
+/// A depth-one handoff between ScreenCaptureKit's sample queue and AppKit's main thread.
+///
+/// At high refresh rates, creating one unbounded MainActor task per captured frame lets old frames
+/// sit behind unrelated UI work. AVSampleBufferDisplayLayer then receives those buffers after their
+/// presentation timestamps have passed and drops them as late. This mailbox schedules at most one
+/// main-thread delivery at a time and replaces only a frame that has not reached the renderer yet,
+/// keeping the displayed stream live without building latency.
+final class LatestVideoFramePresenter: @unchecked Sendable {
+    private struct PendingFrame {
+        let sampleBuffer: CMSampleBuffer
+        let nativeSize: CGSize
+    }
+
+    private let lock = NSLock()
+    private var pendingFrame: PendingFrame?
+    private var deliveryScheduled = false
+    private var isInvalidated = false
+    private let presentOnMain: (CMSampleBuffer, CGSize) -> Void
+
+    @MainActor
+    init(panelController: PiPPanelController) {
+        presentOnMain = { [weak panelController] sampleBuffer, nativeSize in
+            panelController?.enqueue(sampleBuffer, nativeSize: nativeSize)
+        }
+    }
+
+    func submit(_ sampleBuffer: CMSampleBuffer, nativeSize: CGSize) {
+        lock.lock()
+        guard !isInvalidated else {
+            lock.unlock()
+            return
+        }
+        pendingFrame = PendingFrame(sampleBuffer: sampleBuffer, nativeSize: nativeSize)
+        let shouldSchedule = !deliveryScheduled
+        if shouldSchedule { deliveryScheduled = true }
+        lock.unlock()
+
+        guard shouldSchedule else { return }
+        DispatchQueue.main.async { [weak self] in
+            self?.deliverLatestFrame()
+        }
+    }
+
+    func invalidate() {
+        lock.lock()
+        isInvalidated = true
+        pendingFrame = nil
+        lock.unlock()
+    }
+
+    private func deliverLatestFrame() {
+        lock.lock()
+        let frame = pendingFrame
+        pendingFrame = nil
+        deliveryScheduled = false
+        let shouldPresent = !isInvalidated
+        lock.unlock()
+
+        guard shouldPresent, let frame else { return }
+        presentOnMain(frame.sampleBuffer, frame.nativeSize)
+    }
+}
+
 @MainActor
 protocol PiPVideoLayerViewDelegate: AnyObject {
     /// The real cursor moved somewhere within the content area that isn't a resize edge and
@@ -593,6 +656,14 @@ final class PiPVideoLayerView: NSView {
         if displayLayer.status == .failed {
             displayLayer.flush()
         }
+        // ScreenCaptureKit timestamps describe when the desktop frame was captured. Any main-loop
+        // delay between capture and enqueue can make that time older than the next presentation
+        // opportunity, which AVSampleBufferDisplayLayer treats as a late frame. Rebase only the
+        // output presentation time onto the current host clock; the IOSurface remains zero-copy.
+        _ = CMSampleBufferSetOutputPresentationTimeStamp(
+            sampleBuffer,
+            newValue: CMClockGetTime(CMClockGetHostTimeClock())
+        )
         displayLayer.enqueue(sampleBuffer)
         if !hasShownFirstFrame {
             hasShownFirstFrame = true

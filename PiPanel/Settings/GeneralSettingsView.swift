@@ -52,7 +52,7 @@ struct GeneralSettingsView: View {
                         ),
                         range: Double(DisplayRefreshRate.minimumSelectableFPS)...Double(maximumDisplayFPS),
                         step: 1,
-                        hint: "最高可达当前显示器刷新率；每个画中画会按源窗口所在显示器自动限速"
+                        hint: "最高可达当前显示器刷新率；画中画移动到不同显示器后会自动匹配该屏幕的刷新率"
                     )
 
                     SliderSettingRow(
@@ -62,9 +62,9 @@ struct GeneralSettingsView: View {
                             return "\(size.width) × \(size.height)"
                         }(),
                         value: $settings.virtualDisplayLongEdge,
-                        range: 1280...2560,
+                        range: SettingsStore.minimumVirtualDisplayLongEdge...SettingsStore.maximumVirtualDisplayLongEdge,
                         step: 128,
-                        hint: "决定画中画窗口最大能拉伸到多大；对已打开的画中画立即生效"
+                        hint: "决定画中画的最大可用空间；较低分辨率更省资源，必要时会自动扩展以容纳源窗口"
                     )
 
                     SliderSettingRow(

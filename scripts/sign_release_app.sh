@@ -44,6 +44,11 @@ if [[ "$identity" == "-" ]]; then
     # An ad-hoc signature has no Team ID. Enabling Hardened Runtime here would turn on
     # Library Validation and dyld would reject embedded third-party frameworks before main().
     sign_args+=(--timestamp=none)
+elif [[ "$identity" == "PiPanel Local Code Signing" ]]; then
+    # The local certificate intentionally has no Apple Team ID. Keep Library Validation off so
+    # MediaRemoteAdapter and Sparkle can load; a secure timestamp would not make this identity
+    # eligible for notarization and would add a needless network dependency.
+    sign_args+=(--timestamp=none)
 else
     sign_args+=(--options runtime --timestamp)
 fi

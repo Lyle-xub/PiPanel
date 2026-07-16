@@ -1,6 +1,8 @@
 import AppKit
 
 final class AppDelegate: NSObject, NSApplicationDelegate {
+    private var isRestoringWindowsForTermination = false
+
     func applicationDidFinishLaunching(_ notification: Notification) {
         #if DEBUG
         debugTrace("applicationDidFinishLaunching START")
@@ -67,6 +69,22 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
     func applicationShouldTerminateAfterLastWindowClosed(_ sender: NSApplication) -> Bool {
         false
+    }
+
+    /// Source windows live on private virtual displays while PiP is active. App termination must
+    /// therefore wait for the same verified restoration path used by closing a panel; merely
+    /// letting the process disappear can remove the display before an asynchronous AX move lands,
+    /// leaving the source app's window stranded or apparently missing after PiPanel exits.
+    func applicationShouldTerminate(_ sender: NSApplication) -> NSApplication.TerminateReply {
+        guard !isRestoringWindowsForTermination else { return .terminateLater }
+        isRestoringWindowsForTermination = true
+        Task { @MainActor in
+            PiPanelLogger.app.info("Restoring all PiP source windows before termination")
+            await PiPSessionManager.shared.stopAllAndWaitForWindowRestoration()
+            PiPanelLogger.app.info("All PiP source windows restored; allowing termination")
+            sender.reply(toApplicationShouldTerminate: true)
+        }
+        return .terminateLater
     }
 
     /// Handles the "pipanel://recover?token=..." deep link from the one-time recovery email

@@ -63,15 +63,16 @@ final class InteractionForwarder {
     // MARK: - Cursor capture
 
     func beginCaptureIfNeeded(atLocalPoint localPoint: CGPoint) {
-        guard !isCaptured, let videoView, let windowFrame = captureSession?.currentSourceWindowFrame() else { return }
+        guard !isCaptured, let captureSession, let videoView,
+              let capturedContentFrame = captureSession.currentCapturedContentFrame() else { return }
         let displayedRect = videoView.displayedVideoRect(nativeSize: videoView.nativeSize)
         guard let virtualPoint = CoordinateTranslator.globalPoint(
             forLocalPoint: localPoint,
             viewBounds: videoView.bounds,
             nativeSize: videoView.nativeSize,
             displayedVideoRect: displayedRect,
-            windowGlobalFrame: windowFrame
-        ) else { return }
+            windowGlobalFrame: capturedContentFrame
+        ), captureSession.canForwardInteraction(at: virtualPoint) else { return }
 
         isCaptured = true
         CGWarpMouseCursorPosition(virtualPoint)
@@ -99,12 +100,12 @@ final class InteractionForwarder {
     /// local coordinates — both to update the visible indicator, and, if that position has moved
     /// past the mirrored window's edge, to hand control back to the real screen.
     private func handleCapturedMouseMoved() {
-        guard isCaptured, let windowFrame = captureSession?.currentSourceWindowFrame(),
-              windowFrame.width > 0, windowFrame.height > 0,
+        guard isCaptured, let capturedContentFrame = captureSession?.currentCapturedContentFrame(),
+              capturedContentFrame.width > 0, capturedContentFrame.height > 0,
               let current = CGEvent(source: nil)?.location else { return }
 
-        let fracX = (current.x - windowFrame.minX) / windowFrame.width
-        let fracYFromTop = (current.y - windowFrame.minY) / windowFrame.height
+        let fracX = (current.x - capturedContentFrame.minX) / capturedContentFrame.width
+        let fracYFromTop = (current.y - capturedContentFrame.minY) / capturedContentFrame.height
 
         guard fracX < 0 || fracX > 1 || fracYFromTop < 0 || fracYFromTop > 1 else {
             updateCapturedCursorIndicator(fracX: fracX, fracYFromTop: fracYFromTop, clamped: false)

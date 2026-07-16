@@ -19,10 +19,8 @@ enum AXWindowLocator {
     /// display intrusion guard gets its cheap first-pass snapshots from CGWindowList, then uses
     /// this overload only for the rare window that actually appears inside a managed display.
     static func locate(ownerPID: pid_t, approximateFrame: CGRect, title: String?) -> AXUIElement? {
-        let appElement = AXUIElementCreateApplication(ownerPID)
-        var windowsValue: CFTypeRef?
-        let result = AXUIElementCopyAttributeValue(appElement, kAXWindowsAttribute as CFString, &windowsValue)
-        guard result == .success, let windows = windowsValue as? [AXUIElement] else { return nil }
+        let windows = windows(ownerPID: ownerPID)
+        guard !windows.isEmpty else { return nil }
 
         var bestMatch: (element: AXUIElement, score: CGFloat)?
         for window in windows {
@@ -46,6 +44,37 @@ enum AXWindowLocator {
         return windows.first { titleMatches($0, title) }
     }
 
+    /// Returns fresh AX window elements for an application. Native fullscreen transitions may
+    /// replace the element returned before the transition with a companion element, so callers
+    /// restoring a window must not rely exclusively on a cached AXUIElement.
+    static func windows(ownerPID: pid_t) -> [AXUIElement] {
+        let appElement = AXUIElementCreateApplication(ownerPID)
+        var windowsValue: CFTypeRef?
+        let result = AXUIElementCopyAttributeValue(
+            appElement,
+            kAXWindowsAttribute as CFString,
+            &windowsValue
+        )
+        guard result == .success else { return [] }
+        return windowsValue as? [AXUIElement] ?? []
+    }
+
+    /// Reads the WindowServer's current frame for the original CGWindowID. This remains the
+    /// authoritative identity when a fullscreen transition leaves the cached AX element stale.
+    static func currentFrame(ofWindowID windowID: CGWindowID) -> CGRect? {
+        guard let rawList = CGWindowListCopyWindowInfo(
+            [.optionIncludingWindow, .excludeDesktopElements],
+            windowID
+        ) as? [[String: Any]],
+        let entry = rawList.first,
+        let bounds = entry[kCGWindowBounds as String] as? [String: Any],
+        let frame = CGRect(dictionaryRepresentation: bounds as CFDictionary),
+        frame.width > 0, frame.height > 0 else {
+            return nil
+        }
+        return frame
+    }
+
     static func frame(of window: AXUIElement) -> CGRect? {
         guard let origin = point(window, kAXPositionAttribute),
               let size = size(window, kAXSizeAttribute) else { return nil }
@@ -67,12 +96,25 @@ enum AXWindowLocator {
     /// does for a normal windowed one). An app that doesn't support fullscreen at all, or doesn't
     /// expose this attribute, reads as false here — treated as "not fullscreen" (eligible), which
     /// is the correct default for a window there's simply no fullscreen state to check.
-    static func isFullScreen(_ window: AXUIElement) -> Bool {
+    static func fullScreenState(of window: AXUIElement) -> Bool? {
         var value: CFTypeRef?
         guard AXUIElementCopyAttributeValue(window, "AXFullScreen" as CFString, &value) == .success else {
-            return false
+            return nil
         }
-        return (value as? Bool) ?? false
+        return value as? Bool
+    }
+
+    static func isFullScreen(_ window: AXUIElement) -> Bool {
+        fullScreenState(of: window) ?? false
+    }
+
+    /// Requests native macOS fullscreen on/off for an arbitrary application's window. PiPanel
+    /// writes `false` when a source enters a fullscreen Space while parked on a hidden display,
+    /// because AX frame writes are ineffective until that Space transition has ended.
+    @discardableResult
+    static func setFullScreen(_ fullScreen: Bool, on window: AXUIElement) -> AXError {
+        let value = NSNumber(value: fullScreen)
+        return AXUIElementSetAttributeValue(window, "AXFullScreen" as CFString, value)
     }
 
     /// kAXMinimizedAttribute, unlike AXFullScreen above, *is* a standard published attribute — used

@@ -60,6 +60,189 @@ final class PiPActivationMethodTests: XCTestCase {
     }
 }
 
+final class SettingsStoreTests: XCTestCase {
+    @MainActor
+    func testOriginalMinimumVirtualDisplayResolutionRemainsAvailable() {
+        let (defaults, suiteName) = makeIsolatedDefaults()
+        defer { defaults.removePersistentDomain(forName: suiteName) }
+        defaults.set(1280.0, forKey: "settings.virtualDisplayLongEdge")
+
+        let settings = SettingsStore(userDefaults: defaults)
+
+        XCTAssertEqual(
+            settings.virtualDisplayLongEdge,
+            1280
+        )
+        XCTAssertEqual(
+            defaults.double(forKey: "settings.virtualDisplayLongEdge"),
+            1280
+        )
+    }
+
+    @MainActor
+    func testResetRestoresEveryUserFacingSettingAndPersistsDefaults() {
+        let (defaults, suiteName) = makeIsolatedDefaults()
+        defer { defaults.removePersistentDomain(forName: suiteName) }
+        let settings = SettingsStore(userDefaults: defaults)
+
+        settings.targetFPS = 48
+        settings.virtualDisplayLongEdge = SettingsStore.minimumVirtualDisplayLongEdge
+        settings.captureOutputLongEdge = 2560
+        settings.autoReturnEnabled = true
+        settings.autoReturnIdleInterval = 5
+        settings.autoStackOnIdleEnabled = true
+        settings.autoStackIdleInterval = 300
+        settings.autoHideWhenSourceActive = false
+        settings.hasCompletedWelcome = true
+        settings.defaultPanelWidth = 600
+        settings.defaultStackingCorner = .bottomLeft
+        settings.panelCornerRadius = 24
+        settings.panelShadowEnabled = false
+        settings.edgeHandleColorHex = "123456"
+        settings.edgeHandleWidth = 20
+        settings.edgeHandleHeight = 120
+        settings.stackCascadeStep = 30
+        settings.stackCascadeMargin = 48
+        settings.stackMaxVisibleDepth = 10
+        settings.panelAppearRippleEnabled = false
+        settings.panelBackgroundColorHex = "654321"
+        settings.panelBorderStyle = .glow
+        settings.panelBorderColorHex = "ABCDEF"
+        settings.panelBorderGradientEndColorHex = "FEDCBA"
+        settings.panelBorderWidth = 6
+        settings.panelTitleEnabled = true
+        settings.panelOpacity = 0.2
+        settings.panelLyricsEnabled = false
+        settings.panelCloseMethod = .cornerButton
+        settings.pipActivationMethod = .shake
+        settings.stackShortcut = nil
+        settings.closeAllShortcut = nil
+        settings.pipAllShortcut = nil
+
+        settings.resetToDefaults()
+
+        assertDefaultSettings(settings)
+        XCTAssertTrue(settings.hasCompletedWelcome)
+
+        let reloaded = SettingsStore(userDefaults: defaults)
+        assertDefaultSettings(reloaded)
+        XCTAssertTrue(reloaded.hasCompletedWelcome)
+    }
+
+    private func makeIsolatedDefaults() -> (UserDefaults, String) {
+        let suiteName = "PiPanelTests.SettingsStore.\(UUID().uuidString)"
+        let defaults = UserDefaults(suiteName: suiteName)!
+        defaults.removePersistentDomain(forName: suiteName)
+        return (defaults, suiteName)
+    }
+
+    @MainActor
+    private func assertDefaultSettings(
+        _ settings: SettingsStore,
+        file: StaticString = #filePath,
+        line: UInt = #line
+    ) {
+        let values = SettingsStore.DefaultValues.self
+        XCTAssertEqual(settings.targetFPS, values.targetFPS, file: file, line: line)
+        XCTAssertEqual(
+            settings.virtualDisplayLongEdge,
+            values.virtualDisplayLongEdge,
+            file: file,
+            line: line
+        )
+        XCTAssertEqual(
+            settings.captureOutputLongEdge,
+            values.captureOutputLongEdge,
+            file: file,
+            line: line
+        )
+        XCTAssertEqual(settings.autoReturnEnabled, values.autoReturnEnabled, file: file, line: line)
+        XCTAssertEqual(
+            settings.autoReturnIdleInterval,
+            values.autoReturnIdleInterval,
+            file: file,
+            line: line
+        )
+        XCTAssertEqual(
+            settings.autoStackOnIdleEnabled,
+            values.autoStackOnIdleEnabled,
+            file: file,
+            line: line
+        )
+        XCTAssertEqual(
+            settings.autoStackIdleInterval,
+            values.autoStackIdleInterval,
+            file: file,
+            line: line
+        )
+        XCTAssertEqual(
+            settings.autoHideWhenSourceActive,
+            values.autoHideWhenSourceActive,
+            file: file,
+            line: line
+        )
+        XCTAssertEqual(settings.defaultPanelWidth, values.defaultPanelWidth, file: file, line: line)
+        XCTAssertEqual(
+            settings.defaultStackingCorner,
+            values.defaultStackingCorner,
+            file: file,
+            line: line
+        )
+        XCTAssertEqual(settings.panelCornerRadius, values.panelCornerRadius, file: file, line: line)
+        XCTAssertEqual(settings.panelShadowEnabled, values.panelShadowEnabled, file: file, line: line)
+        XCTAssertEqual(settings.edgeHandleColorHex, values.edgeHandleColorHex, file: file, line: line)
+        XCTAssertEqual(settings.edgeHandleWidth, values.edgeHandleWidth, file: file, line: line)
+        XCTAssertEqual(settings.edgeHandleHeight, values.edgeHandleHeight, file: file, line: line)
+        XCTAssertEqual(settings.stackCascadeStep, values.stackCascadeStep, file: file, line: line)
+        XCTAssertEqual(settings.stackCascadeMargin, values.stackCascadeMargin, file: file, line: line)
+        XCTAssertEqual(
+            settings.stackMaxVisibleDepth,
+            values.stackMaxVisibleDepth,
+            file: file,
+            line: line
+        )
+        XCTAssertEqual(
+            settings.panelAppearRippleEnabled,
+            values.panelAppearRippleEnabled,
+            file: file,
+            line: line
+        )
+        XCTAssertEqual(
+            settings.panelBackgroundColorHex,
+            values.panelBackgroundColorHex,
+            file: file,
+            line: line
+        )
+        XCTAssertEqual(settings.panelBorderStyle, values.panelBorderStyle, file: file, line: line)
+        XCTAssertEqual(
+            settings.panelBorderColorHex,
+            values.panelBorderColorHex,
+            file: file,
+            line: line
+        )
+        XCTAssertEqual(
+            settings.panelBorderGradientEndColorHex,
+            values.panelBorderGradientEndColorHex,
+            file: file,
+            line: line
+        )
+        XCTAssertEqual(settings.panelBorderWidth, values.panelBorderWidth, file: file, line: line)
+        XCTAssertEqual(settings.panelTitleEnabled, values.panelTitleEnabled, file: file, line: line)
+        XCTAssertEqual(settings.panelOpacity, values.panelOpacity, file: file, line: line)
+        XCTAssertEqual(settings.panelLyricsEnabled, values.panelLyricsEnabled, file: file, line: line)
+        XCTAssertEqual(settings.panelCloseMethod, values.panelCloseMethod, file: file, line: line)
+        XCTAssertEqual(
+            settings.pipActivationMethod,
+            values.pipActivationMethod,
+            file: file,
+            line: line
+        )
+        XCTAssertEqual(settings.stackShortcut, values.stackShortcut, file: file, line: line)
+        XCTAssertEqual(settings.closeAllShortcut, values.closeAllShortcut, file: file, line: line)
+        XCTAssertEqual(settings.pipAllShortcut, values.pipAllShortcut, file: file, line: line)
+    }
+}
+
 final class PanelPlacementAnchorTests: XCTestCase {
     func testTopRightAnchorSurvivesPhysicalScreenOriginChange() {
         let anchor = PanelPlacementAnchor(
@@ -177,9 +360,227 @@ final class CoordinateTranslatorTests: XCTestCase {
         XCTAssertEqual(DisplayRefreshRate.maximumFPS(from: [0, -1]), 60)
     }
 
-    func testCaptureFrameRateIsLimitedBySourceDisplay() {
+    func testCaptureFrameRateIsLimitedByCaptureAndPresentationDisplays() {
         XCTAssertEqual(CaptureSession.effectiveFrameRate(requested: 144, displayMaximum: 60), 60)
         XCTAssertEqual(CaptureSession.effectiveFrameRate(requested: 120, displayMaximum: 144), 120)
+        XCTAssertEqual(
+            CaptureSession.effectiveFrameRate(
+                requested: 144,
+                captureMaximum: 144,
+                presentationMaximum: 144
+            ),
+            144
+        )
+        XCTAssertEqual(
+            CaptureSession.effectiveFrameRate(
+                requested: 144,
+                captureMaximum: 144,
+                presentationMaximum: 60
+            ),
+            60
+        )
+    }
+
+    func testDockIsAlwaysExcludedFromVirtualDisplayCapture() {
+        XCTAssertTrue(CaptureSession.excludesSystemUI(bundleIdentifier: "com.apple.dock"))
+        XCTAssertFalse(CaptureSession.excludesSystemUI(bundleIdentifier: "com.apple.finder"))
+        XCTAssertFalse(CaptureSession.excludesSystemUI(bundleIdentifier: nil))
+    }
+
+    func testSourceWindowIsNotExceptedWhenOnlyDockIsExcluded() {
+        XCTAssertFalse(
+            CaptureSession.shouldExceptSourceWindow(
+                sourceProcessID: 100,
+                excludedApplicationProcessIDs: [200]
+            )
+        )
+    }
+
+    func testSourceWindowIsExceptedWhenSiblingBelongsToSameApplication() {
+        XCTAssertTrue(
+            CaptureSession.shouldExceptSourceWindow(
+                sourceProcessID: 100,
+                excludedApplicationProcessIDs: [100, 200]
+            )
+        )
+    }
+
+    func testInitialSourceWindowKeepsDockTriggerZoneClear() {
+        let fitted = CaptureSession.sourceSizeFittingSafeArea(
+            CGSize(width: 1600, height: 1000),
+            displaySize: CGSize(width: 1280, height: 800),
+            localOrigin: CGPoint(x: 40, y: 44)
+        )
+
+        XCTAssertEqual(fitted.width, 1081.6, accuracy: 0.001)
+        XCTAssertEqual(fitted.height, 676, accuracy: 0.001)
+        XCTAssertLessThanOrEqual(
+            44 + fitted.height + CaptureSession.dockAvoidanceInset,
+            800
+        )
+    }
+
+    func testOversizedElectronWindowRequiresExpandedDisplay() {
+        let sourceFrame = CGRect(x: 40, y: 44, width: 1120, height: 678)
+        let required = CaptureSession.requiredDisplaySize(forSourceFrame: sourceFrame)
+
+        XCTAssertEqual(required, CGSize(width: 1200, height: 802))
+        XCTAssertFalse(
+            CaptureSession.sourceFrameFitsSafeArea(
+                sourceFrame,
+                displaySize: CGSize(width: 1081.6, height: 676)
+            )
+        )
+        XCTAssertTrue(
+            CaptureSession.sourceFrameFitsSafeArea(
+                sourceFrame,
+                displaySize: CGSize(width: 1283.75, height: 802.75)
+            )
+        )
+    }
+
+    func testNativeFullScreenCaptureUsesEntireRawVirtualDisplay() {
+        let rect = CaptureSession.nativeFullScreenCaptureRect(
+            displaySize: CGSize(width: 2560, height: 1600)
+        )
+
+        XCTAssertEqual(rect, CGRect(x: 0, y: 0, width: 2560, height: 1600))
+    }
+
+    func testCaptureCanvasUsesWindowServerRegistrationInsteadOfRequestedMode() {
+        let size = VirtualDisplayHost.captureCanvasSize(
+            registeredSize: CGSize(width: 2560, height: 1600),
+            fallbackModeSize: CGSize(width: 1280, height: 800)
+        )
+
+        XCTAssertEqual(size, CGSize(width: 2560, height: 1600))
+    }
+
+    func testCaptureCanvasFallsBackWhileDisplayIsStillRegistering() {
+        let size = VirtualDisplayHost.captureCanvasSize(
+            registeredSize: .zero,
+            fallbackModeSize: CGSize(width: 1280, height: 800)
+        )
+
+        XCTAssertEqual(size, CGSize(width: 1280, height: 800))
+    }
+
+    func testCaptureCanvasUsesLargerLiveModeAfterResize() {
+        let size = VirtualDisplayHost.captureCanvasSize(
+            registeredSize: CGSize(width: 1664, height: 1040),
+            fallbackModeSize: CGSize(width: 1975, height: 1235)
+        )
+
+        XCTAssertEqual(size, CGSize(width: 1975, height: 1235))
+    }
+
+    func testVirtualDisplayModeGrowsEnoughForBilibiliMinimumSize() {
+        let pixelSize = VirtualDisplayHost.pixelSizeFitting(
+            coordinateSize: CGSize(width: 1200, height: 802),
+            pointsPerPixel: CGSize(width: 0.65, height: 0.65),
+            minimumPixelSize: CGSize(width: 1664, height: 1040)
+        )
+
+        XCTAssertEqual(pixelSize, CGSize(width: 1975, height: 1235))
+        let coordinateSize = VirtualDisplayHost.coordinateSize(
+            pixelSize: pixelSize!,
+            pointsPerPixel: CGSize(width: 0.65, height: 0.65)
+        )
+        XCTAssertGreaterThanOrEqual(coordinateSize.width, 1200)
+        XCTAssertGreaterThanOrEqual(coordinateSize.height, 802)
+    }
+
+    func testVirtualDisplayModeRejectsWindowBeyondDescriptorCeiling() {
+        XCTAssertNil(
+            VirtualDisplayHost.pixelSizeFitting(
+                coordinateSize: CGSize(width: 2000, height: 1400),
+                pointsPerPixel: CGSize(width: 0.65, height: 0.65),
+                minimumPixelSize: CGSize(width: 1664, height: 1040)
+            )
+        )
+    }
+
+    func testFullscreenLikeWindowWithoutAXFlagUsesRawDisplayCapture() {
+        XCTAssertTrue(
+            CaptureSession.isFullVirtualDisplayFrame(
+                CGRect(x: 1920, y: 30, width: 2560, height: 1570),
+                displayOrigin: CGPoint(x: 1920, y: 0),
+                displayPixelSize: CGSize(width: 2560, height: 1600)
+            )
+        )
+    }
+
+    func testOrdinaryWindowIsNotMistakenForFullscreen() {
+        XCTAssertFalse(
+            CaptureSession.isFullVirtualDisplayFrame(
+                CGRect(x: 1960, y: 44, width: 1120, height: 678),
+                displayOrigin: CGPoint(x: 1920, y: 0),
+                displayPixelSize: CGSize(width: 2560, height: 1600)
+            )
+        )
+    }
+
+    func testMaximumSafeAreaWindowIsNotMistakenForFullscreen() {
+        XCTAssertFalse(
+            CaptureSession.isFullVirtualDisplayFrame(
+                CGRect(x: 1960, y: 44, width: 1526, height: 916),
+                displayOrigin: CGPoint(x: 1920, y: 0),
+                displayPixelSize: CGSize(width: 1664, height: 1040)
+            )
+        )
+    }
+
+    func testBorderlessFullscreenWithTitleBarInsetIsDetected() {
+        XCTAssertTrue(
+            CaptureSession.isFullVirtualDisplayFrame(
+                CGRect(x: 1920, y: 30, width: 1664, height: 1010),
+                displayOrigin: CGPoint(x: 1920, y: 0),
+                displayPixelSize: CGSize(width: 1664, height: 1040)
+            )
+        )
+    }
+
+    func testInteractionCannotEnterVirtualDisplayDockTriggerZone() {
+        let display = CGRect(x: 2000, y: 1000, width: 1280, height: 800)
+
+        XCTAssertTrue(
+            CaptureSession.isOutsideDockTriggerZone(
+                CGPoint(x: 2200, y: 1600),
+                displayBounds: display
+            )
+        )
+        XCTAssertFalse(
+            CaptureSession.isOutsideDockTriggerZone(
+                CGPoint(x: 2200, y: 1750),
+                displayBounds: display
+            )
+        )
+    }
+
+    func testOversizedCapturedContentCanUseVisibleControlsInsideDockStrip() {
+        let display = CGRect(x: 2000, y: 1000, width: 1280, height: 800)
+        let captured = CGRect(x: 2046, y: 1050, width: 1188, height: 750)
+
+        XCTAssertTrue(
+            CaptureSession.canForwardInteraction(
+                at: CGPoint(x: 3200, y: 1760),
+                displayBounds: display,
+                capturedContentFrame: captured
+            )
+        )
+    }
+
+    func testOrdinaryWindowStillCannotEnterDockTriggerZone() {
+        let display = CGRect(x: 2000, y: 1000, width: 1280, height: 800)
+        let captured = CGRect(x: 2046, y: 1050, width: 1000, height: 650)
+
+        XCTAssertFalse(
+            CaptureSession.canForwardInteraction(
+                at: CGPoint(x: 3000, y: 1760),
+                displayBounds: display,
+                capturedContentFrame: captured
+            )
+        )
     }
 
     func testVirtualDisplaysUseTwoTimesBackingScale() {
@@ -309,6 +710,44 @@ final class CoordinateTranslatorTests: XCTestCase {
         )
 
         XCTAssertNil(point)
+    }
+
+    func testCaptureSourceRectMatchesVisibleIntersectionForOversizedWindow() {
+        let sourceRect = CaptureSession.captureSourceRect(
+            for: CGRect(x: 40, y: 44, width: 1200, height: 900),
+            displaySize: CGSize(width: 1280, height: 800)
+        )
+
+        // The ordinary 6pt edge inset is applied first, then the portion extending below the
+        // virtual display is clipped away.
+        XCTAssertEqual(sourceRect, CGRect(x: 46, y: 50, width: 1188, height: 750))
+    }
+
+    func testCapturedContentGlobalFrameUsesClippedDisplayRegion() {
+        let frame = CaptureSession.globalCaptureFrame(
+            localRect: CGRect(x: 40, y: 44, width: 1200, height: 900),
+            displayOrigin: CGPoint(x: 2560, y: 0),
+            displaySize: CGSize(width: 1280, height: 800)
+        )
+
+        XCTAssertEqual(frame, CGRect(x: 2606, y: 50, width: 1188, height: 750))
+    }
+
+    func testBottomHalfClickUsesCapturedHeightInsteadOfOversizedAXHeight() {
+        let capturedFrame = CGRect(x: 2606, y: 50, width: 1188, height: 750)
+        let point = CoordinateTranslator.globalPoint(
+            forLocalPoint: CGPoint(x: 200, y: 0.1),
+            viewBounds: CGRect(x: 0, y: 0, width: 400, height: 300),
+            // Simulates the stale full AX size that previously drove Bilibili/RedNote mapping.
+            nativeSize: CGSize(width: 1200, height: 900),
+            displayedVideoRect: CGRect(x: 0, y: 0, width: 400, height: 300),
+            windowGlobalFrame: capturedFrame
+        )
+
+        XCTAssertNotNil(point)
+        XCTAssertEqual(point!.x, capturedFrame.midX, accuracy: 0.01)
+        XCTAssertEqual(point!.y, capturedFrame.maxY - 0.25, accuracy: 0.01)
+        XCTAssertLessThan(point!.y, 800.01)
     }
 }
 

@@ -4,7 +4,6 @@ import AppKit
 import ApplicationServices
 
 protocol CaptureSessionDelegate: AnyObject {
-    func captureSession(_ session: CaptureSession, didOutput sampleBuffer: CMSampleBuffer)
     func captureSessionDidStop(_ session: CaptureSession, error: Error?)
 }
 
@@ -55,6 +54,7 @@ final class CaptureSession: NSObject {
 
     let windowInfo: WindowInfo
     weak var delegate: CaptureSessionDelegate?
+    private let framePresenter: LatestVideoFramePresenter
 
     private(set) var virtualDisplayHost: VirtualDisplayHost?
     private(set) var originalFrame: CGRect?
@@ -168,6 +168,10 @@ final class CaptureSession: NSObject {
     /// Keeps the crop in sync with the window's live frame for as long as the session is
     /// presenting in PiP — see startFrameWatch.
     private var frameWatchTimer: Timer?
+    /// True while the source fills the private display. Some apps expose AXFullScreen; Chromium-
+    /// based apps and Bilibili can instead grow a normal AX window to the display's raw pixel
+    /// dimensions. Both cases must use the full-display capture coordinate space.
+    private var isSourceNativeFullScreen = false
     /// See observeScreenParameterChanges/reanchorAfterDisplayReconfiguration.
     private var screenParamsObserver: NSObjectProtocol?
     private var isReanchoring = false
@@ -184,19 +188,41 @@ final class CaptureSession: NSObject {
     var targetFPS: Int = 15 {
         didSet { Task { try? await applyConfiguration() } }
     }
-    /// Refresh ceiling of the physical display that contained the source window when PiP was
-    /// created. The global setting may follow a faster monitor, but a session that came from a
-    /// 60 Hz screen should not ask ScreenCaptureKit for frames that display cannot produce.
-    var sourceDisplayMaximumFPS: Int = DisplayRefreshRate.fallbackFPS {
+    /// Refresh ceiling of the private display ScreenCaptureKit actually captures. The source
+    /// window no longer lives on its original physical display once PiP starts, so capping against
+    /// that old screen incorrectly kept a 120/144 Hz PiP at 60 fps even though the private display
+    /// and the panel's destination screen could both present faster.
+    var captureDisplayMaximumFPS: Int = DisplayRefreshRate.fallbackFPS {
+        didSet { Task { try? await applyConfiguration() } }
+    }
+    /// Refresh ceiling of the physical screen currently presenting the PiP panel. Capturing more
+    /// frames than this screen can scan out only makes AVSampleBufferDisplayLayer discard them.
+    var presentationDisplayMaximumFPS: Int = DisplayRefreshRate.fallbackFPS {
         didSet { Task { try? await applyConfiguration() } }
     }
 
     private var effectiveTargetFPS: Int {
-        Self.effectiveFrameRate(requested: targetFPS, displayMaximum: sourceDisplayMaximumFPS)
+        Self.effectiveFrameRate(
+            requested: targetFPS,
+            captureMaximum: captureDisplayMaximumFPS,
+            presentationMaximum: presentationDisplayMaximumFPS
+        )
     }
 
     static func effectiveFrameRate(requested: Int, displayMaximum: Int) -> Int {
         min(max(requested, 1), max(displayMaximum, 1))
+    }
+
+    static func effectiveFrameRate(
+        requested: Int,
+        captureMaximum: Int,
+        presentationMaximum: Int
+    ) -> Int {
+        min(
+            max(requested, 1),
+            max(captureMaximum, 1),
+            max(presentationMaximum, 1)
+        )
     }
     /// The private virtual display's pixel long edge. Before start() runs (virtualDisplayHost ==
     /// nil), setting this just records the size start() will create the display at — set once by
@@ -259,6 +285,10 @@ final class CaptureSession: NSObject {
         // bookkeeping changes later clamp calculations, but leaves the stream configured against
         // the old display/crop dimensions until some unrelated panel resize happens. Refresh it
         // immediately so the setting has an observable effect even while the panel is idle.
+        if isSourceNativeFullScreen || sourceOccupiesFullVirtualDisplay() {
+            isSourceNativeFullScreen = true
+            framedRect = Self.nativeFullScreenCaptureRect(displaySize: host.captureCanvasSize)
+        }
         try? await applyConfiguration()
         await VirtualDisplayCoordinator.shared.unlock()
 
@@ -273,8 +303,9 @@ final class CaptureSession: NSObject {
         didSet { Task { try? await applyConfiguration() } }
     }
 
-    init(windowInfo: WindowInfo) {
+    init(windowInfo: WindowInfo, framePresenter: LatestVideoFramePresenter) {
         self.windowInfo = windowInfo
+        self.framePresenter = framePresenter
     }
 
     /// Empty space reserved on the virtual display around the window on the left/right/bottom
@@ -291,6 +322,116 @@ final class CaptureSession: NSObject {
     /// to cap the PiP panel's own resizability at exactly what clampToDeliverableSize below can
     /// actually deliver — see panel.maxSize's doc comment for why that matters.
     static let edgeMargin: CGFloat = 40
+    /// macOS moves the Dock to another display when the pointer dwells against that display's
+    /// exposed bottom edge. InteractionForwarder deliberately warps the real pointer onto a
+    /// virtual display, so source content must end before that trigger strip. A generous inset
+    /// also leaves enough travel for the global mouse monitor to return the pointer to the PiP
+    /// before it can reach the physical display boundary.
+    static let dockAvoidanceInset: CGFloat = 80
+
+    static func sourceSizeFittingSafeArea(
+        _ size: CGSize,
+        displaySize: CGSize,
+        localOrigin: CGPoint
+    ) -> CGSize {
+        guard size.width > 0, size.height > 0 else { return .zero }
+        let capacity = CGSize(
+            width: max(displaySize.width - localOrigin.x - edgeMargin, 1),
+            height: max(displaySize.height - localOrigin.y - dockAvoidanceInset, 1)
+        )
+        let scale = min(1, capacity.width / size.width, capacity.height / size.height)
+        return CGSize(width: size.width * scale, height: size.height * scale)
+    }
+
+    /// ScreenCaptureKit crop used while the source fills a CGVirtualDisplay. Runtime traces show
+    /// this path reports and captures the raw display canvas (for example 2560×1600), unlike the
+    /// ordinary windowed path whose AX crop is in the logical 1280×800 space.
+    static func nativeFullScreenCaptureRect(displaySize: CGSize) -> CGRect {
+        CGRect(origin: .zero, size: displaySize)
+    }
+
+    /// Detects apps that implement fullscreen/zoom without publishing AXFullScreen. Their AX
+    /// frame still covers essentially the complete raw virtual-display canvas.
+    static func isFullVirtualDisplayFrame(
+        _ frame: CGRect,
+        displayOrigin: CGPoint,
+        displayPixelSize: CGSize
+    ) -> Bool {
+        guard displayPixelSize.width > 0, displayPixelSize.height > 0 else { return false }
+        let displayFrame = CGRect(origin: displayOrigin, size: displayPixelSize)
+        // Bilibili/Chromium's borderless fullscreen surface may retain a ~30pt top inset even
+        // though it does not publish AXFullScreen. A merely maximized PiP source deliberately
+        // keeps 40pt side and 80pt bottom safety margins, so checking all four edges with a
+        // tighter tolerance cleanly separates the two. The former percentage-only test accepted
+        // 90%×85%; the trace showed an ordinary 1526×916 window on a 1664×1040 display crossing
+        // that threshold and getting permanently switched to full-display capture mid-drag.
+        let edgeTolerance: CGFloat = 36
+        return frame.width >= displayPixelSize.width * 0.95
+            && frame.height >= displayPixelSize.height * 0.95
+            && abs(frame.minX - displayFrame.minX) <= edgeTolerance
+            && abs(frame.minY - displayFrame.minY) <= edgeTolerance
+            && abs(frame.maxX - displayFrame.maxX) <= edgeTolerance
+            && abs(frame.maxY - displayFrame.maxY) <= edgeTolerance
+    }
+
+    static func excludesSystemUI(bundleIdentifier: String?) -> Bool {
+        bundleIdentifier == "com.apple.dock"
+    }
+
+    /// `SCContentFilter(display:excludingApplications:exceptingWindows:)` treats an exception
+    /// as a toggle, not as an unconditional include. The source window must therefore only be
+    /// listed when its own application was excluded (for example, another PiP window belongs to
+    /// the same process). Listing an otherwise-included source window would exclude it and make
+    /// the stream deliver only the empty virtual-display background.
+    static func shouldExceptSourceWindow(
+        sourceProcessID: pid_t?,
+        excludedApplicationProcessIDs: Set<pid_t>
+    ) -> Bool {
+        guard let sourceProcessID else { return false }
+        return excludedApplicationProcessIDs.contains(sourceProcessID)
+    }
+
+    static func isOutsideDockTriggerZone(_ globalPoint: CGPoint, displayBounds: CGRect) -> Bool {
+        guard displayBounds.width > 0, displayBounds.height > 0 else { return false }
+        return displayBounds.contains(globalPoint)
+            && globalPoint.y < displayBounds.maxY - dockAvoidanceInset
+    }
+
+    static func canForwardInteraction(
+        at globalPoint: CGPoint,
+        displayBounds: CGRect,
+        capturedContentFrame: CGRect?
+    ) -> Bool {
+        guard displayBounds.contains(globalPoint) else { return false }
+        if isOutsideDockTriggerZone(globalPoint, displayBounds: displayBounds) {
+            return true
+        }
+
+        // Normally sourceSizeFittingSafeArea keeps content out of this strip. Electron-style apps
+        // such as Bilibili and RedNote can reject that requested shrink and extend all the way to
+        // the display edge. In that case the strip contains real, visible controls (often the
+        // player's fullscreen button), so rejecting it makes the PiP advertise controls that can
+        // never be clicked. Limit the exception to a captured frame that genuinely reaches into
+        // the strip; ordinary windows retain the Dock-avoidance guard.
+        guard let capturedContentFrame,
+              capturedContentFrame.maxY > displayBounds.maxY - dockAvoidanceInset else {
+            return false
+        }
+        return capturedContentFrame.contains(globalPoint)
+    }
+
+    func canForwardInteraction(at globalPoint: CGPoint) -> Bool {
+        if isSourceNativeFullScreen, let axWindow,
+           let fullScreenFrame = AXWindowLocator.frame(of: axWindow) {
+            return fullScreenFrame.contains(globalPoint)
+        }
+        guard let bounds = virtualDisplayHost?.bounds else { return false }
+        return Self.canForwardInteraction(
+            at: globalPoint,
+            displayBounds: bounds,
+            capturedContentFrame: currentCapturedContentFrame()
+        )
+    }
 
     func start(reanchoring siblingSessions: [CaptureSession] = []) async throws {
         // Serialized: see VirtualDisplayCoordinator for why concurrent session startups aren't safe.
@@ -353,6 +494,7 @@ final class CaptureSession: NSObject {
             mutatedTopology = true
         }
         virtualDisplayHost = host
+        captureDisplayMaximumFPS = max(Int(host.currentRefreshRate.rounded()), 1)
 
         // The normal path leases an already-registered host and performs no display mutation at
         // all. Only an overflow creation or a resolution-mismatch resize needs the expensive
@@ -372,20 +514,51 @@ final class CaptureSession: NSObject {
             size: currentPiPSize,
             positionNewDisplay: false
         )
+        try await expandVirtualDisplayToFitSourceIfNeeded(
+            host: host,
+            axWindow: axWindow,
+            siblingSessions: siblingSessions
+        )
 
-        let scDisplay = try await Self.waitForShareableDisplay(matching: host.displayID)
+        let shareable = try await Self.waitForShareableDisplay(matching: host.displayID)
 
         // Defense in depth: even if WindowServer produces another late transient placement, an
-        // older session's source is never eligible to appear in this brand-new stream.
+        // older session's source is never eligible to appear in this brand-new stream. Excluding
+        // Dock by application identity (rather than only its current windows) also covers Dock
+        // recreating its overlay window after the stream starts.
         let siblingWindows = siblingSessions.map { $0.windowInfo.scWindow }
-        let filter = SCContentFilter(display: scDisplay, excludingWindows: siblingWindows)
-        let config = Self.makeConfiguration(
-            for: framedRect,
-            displaySize: host.bounds.size,
-            displayPixelScale: host.pixelsPerPoint,
-            fps: effectiveTargetFPS,
-            maxLongEdge: maxOutputLongEdge
+        let dockApplications = shareable.content.applications.filter {
+            Self.excludesSystemUI(bundleIdentifier: $0.bundleIdentifier)
+        }
+        let excludedApplicationsByPID = Dictionary(
+            grouping: dockApplications + siblingWindows.compactMap(\.owningApplication),
+            by: \.processID
         )
+        let filter: SCContentFilter
+        if !dockApplications.isEmpty {
+            let excludedApplications = excludedApplicationsByPID.values.compactMap { $0.first }
+            let excludedApplicationProcessIDs = Set(excludedApplications.map(\.processID))
+            let sourceProcessID = windowInfo.scWindow.owningApplication?.processID
+            let sourceExceptions = Self.shouldExceptSourceWindow(
+                sourceProcessID: sourceProcessID,
+                excludedApplicationProcessIDs: excludedApplicationProcessIDs
+            ) ? [windowInfo.scWindow] : []
+            filter = SCContentFilter(
+                display: shareable.display,
+                excludingApplications: excludedApplications,
+                exceptingWindows: sourceExceptions
+            )
+        } else {
+            // Defensive fallback for an OS build that omits Dock from content.applications.
+            let dockWindows = shareable.content.windows.filter {
+                Self.excludesSystemUI(bundleIdentifier: $0.owningApplication?.bundleIdentifier)
+            }
+            filter = SCContentFilter(
+                display: shareable.display,
+                excludingWindows: siblingWindows + dockWindows
+            )
+        }
+        let config = captureConfiguration(for: host)
 
         let stream = SCStream(filter: filter, configuration: config, delegate: self)
         try stream.addStreamOutput(self, type: .screen, sampleHandlerQueue: sampleQueue)
@@ -427,17 +600,105 @@ final class CaptureSession: NSObject {
             positionNewDisplay: positionNewDisplay
         )
 
-        let targetOrigin = CGPoint(x: bounds.origin.x + Self.edgeMargin, y: bounds.origin.y + margin)
-        let targetFrame = CGRect(origin: targetOrigin, size: size)
+        let localOrigin = CGPoint(x: Self.edgeMargin, y: margin)
+        let targetOrigin = CGPoint(x: bounds.origin.x + localOrigin.x, y: bounds.origin.y + localOrigin.y)
+        let fittedSize = Self.sourceSizeFittingSafeArea(
+            size,
+            displaySize: bounds.size,
+            localOrigin: localOrigin
+        )
+        currentPiPSize = fittedSize
+        let targetFrame = CGRect(origin: targetOrigin, size: fittedSize)
         AXWindowLocator.setFrame(targetFrame, on: axWindow)
 
         let resultingFrame = await Self.waitForFrameToSettle(axWindow: axWindow, fallback: targetFrame)
+        isSourceNativeFullScreen = false
         framedRect = CGRect(
             x: resultingFrame.origin.x - bounds.origin.x,
             y: resultingFrame.origin.y - bounds.origin.y,
             width: resultingFrame.width,
             height: resultingFrame.height
         )
+        // The requested fitted size is only an aspiration. Bilibili and RedNote enforce a larger
+        // minimum height, so all later panel/source scaling must start from what the app actually
+        // accepted, not the rejected request.
+        currentPiPSize = resultingFrame.size
+    }
+
+    static func requiredDisplaySize(forSourceFrame localFrame: CGRect) -> CGSize {
+        CGSize(
+            width: localFrame.maxX + edgeMargin,
+            height: localFrame.maxY + dockAvoidanceInset
+        )
+    }
+
+    static func sourceFrameFitsSafeArea(_ localFrame: CGRect, displaySize: CGSize) -> Bool {
+        let required = requiredDisplaySize(forSourceFrame: localFrame)
+        return required.width <= displaySize.width + 0.5
+            && required.height <= displaySize.height + 0.5
+    }
+
+    /// Some Electron apps expose a minimum AX size larger than the user's selected virtual
+    /// display mode can hold. Shrinking was previously attempted once, then the capture sourceRect
+    /// simply intersected the oversized result with the display and permanently discarded its
+    /// lower edge. Grow the already-leased display before SCStream starts, re-stabilize topology,
+    /// and place the actual accepted window size again so every pixel exists on the canvas.
+    private func expandVirtualDisplayToFitSourceIfNeeded(
+        host: VirtualDisplayHost,
+        axWindow: AXUIElement,
+        siblingSessions: [CaptureSession]
+    ) async throws {
+        for attempt in 0..<2 {
+            guard !Self.sourceFrameFitsSafeArea(framedRect, displaySize: host.bounds.size) else {
+                return
+            }
+
+            let requiredCoordinateSize = Self.requiredDisplaySize(forSourceFrame: framedRect)
+            guard let targetPixelSize = host.pixelSizeFitting(
+                coordinateSize: requiredCoordinateSize
+            ) else {
+                debugTrace(
+                    "vdisplay: source exceeds maximum canvas windowID=\(windowInfo.id) "
+                    + "sourceFrame=\(framedRect) requiredCoordinates=\(requiredCoordinateSize)"
+                )
+                throw CaptureSessionError.virtualDisplayCreationFailed
+            }
+
+            let targetWidth = Int(targetPixelSize.width)
+            let targetHeight = Int(targetPixelSize.height)
+            guard targetWidth > Int(host.currentPixelSize.width)
+                    || targetHeight > Int(host.currentPixelSize.height) else {
+                throw CaptureSessionError.virtualDisplayCreationFailed
+            }
+
+            let resized = await MainActor.run {
+                host.resize(pixelWidth: targetWidth, pixelHeight: targetHeight)
+            }
+            guard resized else { throw CaptureSessionError.virtualDisplayCreationFailed }
+
+            debugTrace(
+                "vdisplay: expanded for source windowID=\(windowInfo.id) attempt=\(attempt + 1) "
+                + "sourceFrame=\(framedRect) requiredCoordinates=\(requiredCoordinateSize) "
+                + "pixelMode=(\(targetWidth), \(targetHeight)) coordinateBounds=\(host.bounds)"
+            )
+
+            let topologyHosts = [host] + siblingSessions.compactMap(\.virtualDisplayHost)
+            await Self.waitForStableTopology(hosts: topologyHosts)
+            for sibling in siblingSessions where sibling !== self {
+                await sibling.reanchorWhileTopologyLockIsHeld()
+            }
+
+            let actualSize = currentPiPSize
+            try await moveWindowOntoVirtualDisplay(
+                host: host,
+                axWindow: axWindow,
+                size: actualSize
+            )
+        }
+
+        guard Self.sourceFrameFitsSafeArea(framedRect, displaySize: host.bounds.size) else {
+            throw CaptureSessionError.virtualDisplayCreationFailed
+        }
     }
 
     /// Some apps don't immediately honor the exact frame AXWindowLocator.setFrame just requested
@@ -496,8 +757,34 @@ final class CaptureSession: NSObject {
         // callback may still arrive. Never turn a transient topology position into a live stream
         // crop while the stabilized re-anchor is pending — that exact update is what let another
         // session's source window appear inside an older PiP in the trace.
-        guard presentationState == .pip, !isReanchoring, !isStopping,
-              let current = AXWindowLocator.frame(of: axWindow) else { return }
+        guard presentationState == .pip, !isReanchoring, !isStopping else { return }
+        guard let current = AXWindowLocator.frame(of: axWindow) else { return }
+        let fillsDisplay = AXWindowLocator.isFullScreen(axWindow)
+            || Self.isFullVirtualDisplayFrame(
+                current,
+                displayOrigin: host.bounds.origin,
+                displayPixelSize: host.captureCanvasSize
+            )
+        if fillsDisplay {
+            let fullDisplayRect = Self.nativeFullScreenCaptureRect(displaySize: host.captureCanvasSize)
+            guard !isSourceNativeFullScreen
+                    || !Self.isApproximatelyEqual(framedRect, fullDisplayRect) else { return }
+            isSourceNativeFullScreen = true
+            framedRect = fullDisplayRect
+            debugTrace(
+                "fullscreen: expanded capture windowID=\(windowInfo.id) "
+                + "axFrame=\(current) sourceRect=\(fullDisplayRect) "
+                + "logicalBounds=\(host.bounds) modeSize=\(host.currentPixelSize) "
+                + "captureCanvas=\(host.captureCanvasSize)"
+            )
+            Task { try? await applyConfiguration() }
+            return
+        }
+
+        if isSourceNativeFullScreen {
+            isSourceNativeFullScreen = false
+            debugTrace("fullscreen: source exited native fullscreen windowID=\(windowInfo.id)")
+        }
         let bounds = host.bounds
         let updated = CGRect(
             x: current.origin.x - bounds.origin.x,
@@ -573,7 +860,17 @@ final class CaptureSession: NSObject {
 
             debugTrace("vdisplay: reanchor stabilized windowID=\(self.windowInfo.id) displayID=\(host.displayID) liveFrame=\(AXWindowLocator.frame(of: axWindow) ?? .zero) displayBounds=\(host.bounds)")
             do {
-                try await self.moveWindowOntoVirtualDisplay(host: host, axWindow: axWindow, size: self.currentPiPSize)
+                if self.isSourceNativeFullScreen
+                    || self.sourceOccupiesFullVirtualDisplay(axWindow: axWindow, host: host) {
+                    self.isSourceNativeFullScreen = true
+                    self.framedRect = Self.nativeFullScreenCaptureRect(displaySize: host.captureCanvasSize)
+                } else {
+                    try await self.moveWindowOntoVirtualDisplay(
+                        host: host,
+                        axWindow: axWindow,
+                        size: self.currentPiPSize
+                    )
+                }
                 try await self.applyConfiguration()
             } catch {
                 PiPanelLogger.capture.error("Failed to re-anchor window \(self.windowInfo.id) after display reconfiguration: \(error)")
@@ -601,7 +898,17 @@ final class CaptureSession: NSObject {
         stopFrameWatch()
         debugTrace("vdisplay: sibling barrier reanchor begin windowID=\(windowInfo.id) displayID=\(host.displayID) liveFrame=\(AXWindowLocator.frame(of: axWindow) ?? .zero) displayBounds=\(host.bounds)")
         do {
-            try await moveWindowOntoVirtualDisplay(host: host, axWindow: axWindow, size: currentPiPSize)
+            if isSourceNativeFullScreen
+                || sourceOccupiesFullVirtualDisplay(axWindow: axWindow, host: host) {
+                isSourceNativeFullScreen = true
+                framedRect = Self.nativeFullScreenCaptureRect(displaySize: host.captureCanvasSize)
+            } else {
+                try await moveWindowOntoVirtualDisplay(
+                    host: host,
+                    axWindow: axWindow,
+                    size: currentPiPSize
+                )
+            }
             try await applyConfiguration()
         } catch {
             PiPanelLogger.capture.error("Failed sibling-barrier re-anchor for window \(self.windowInfo.id): \(error)")
@@ -642,13 +949,7 @@ final class CaptureSession: NSObject {
         do {
             try await moveWindowOntoVirtualDisplay(host: host, axWindow: axWindow, size: currentPiPSize)
             if let stream {
-                let config = Self.makeConfiguration(
-                    for: framedRect,
-                    displaySize: host.bounds.size,
-                    displayPixelScale: host.pixelsPerPoint,
-                    fps: effectiveTargetFPS,
-                    maxLongEdge: maxOutputLongEdge
-                )
+                let config = captureConfiguration(for: host)
                 try await stream.updateConfiguration(config)
             }
             presentationState = .pip
@@ -766,6 +1067,7 @@ final class CaptureSession: NSObject {
     /// lagging behind the panel until both dimensions happened to clear it at once.
     private func applyPanelResize(to panelSize: CGSize) async {
         guard presentationState == .pip, !isReanchoring, !isStopping,
+              !isSourceNativeFullScreen,
               let axWindow, let host = virtualDisplayHost,
               framedRect.width > 0, framedRect.height > 0 else {
             debugTrace("grow: applyPanelResize bailed panelSize=\(panelSize) presentationState=\(presentationState) framedRect=\(framedRect)")
@@ -834,7 +1136,7 @@ final class CaptureSession: NSObject {
     /// while pinned at the display's absolute capacity.
     private func clampToDeliverableSize(_ size: CGSize, within bounds: CGRect) -> CGSize {
         let maxWidth = max(bounds.width - framedRect.origin.x - Self.edgeMargin, 1)
-        let maxHeight = max(bounds.height - framedRect.origin.y - Self.edgeMargin, 1)
+        let maxHeight = max(bounds.height - framedRect.origin.y - Self.dockAvoidanceInset, 1)
         guard size.width > 0, size.height > 0, size.width > maxWidth || size.height > maxHeight else {
             return size
         }
@@ -863,7 +1165,7 @@ final class CaptureSession: NSObject {
         guard let bounds = virtualDisplayHost?.bounds, framedRect.width > 0 else { return nil }
         return CGSize(
             width: max(bounds.width - framedRect.origin.x - Self.edgeMargin, 1),
-            height: max(bounds.height - framedRect.origin.y - Self.edgeMargin, 1)
+            height: max(bounds.height - framedRect.origin.y - Self.dockAvoidanceInset, 1)
         )
     }
 
@@ -1188,11 +1490,13 @@ final class CaptureSession: NSObject {
     /// anywhere from under a second up to ~5s to propagate to this process's
     /// ScreenCaptureKit/AppKit view of the display list — retry with a generous budget rather
     /// than failing outright.
-    private static func waitForShareableDisplay(matching displayID: CGDirectDisplayID) async throws -> SCDisplay {
+    private static func waitForShareableDisplay(
+        matching displayID: CGDirectDisplayID
+    ) async throws -> (display: SCDisplay, content: SCShareableContent) {
         for attempt in 0..<20 {
             let content = try await SCShareableContent.current
             if let match = content.displays.first(where: { $0.displayID == displayID }) {
-                return match
+                return (match, content)
             }
             if attempt < 19 {
                 try? await Task.sleep(nanoseconds: 500_000_000)
@@ -1205,6 +1509,7 @@ final class CaptureSession: NSObject {
         // Stop producing transient crop updates immediately, then wait until any in-flight display
         // creation/resize/re-anchor has completed before returning this host to the pool.
         isStopping = true
+        framePresenter.invalidate()
         stallTimer?.cancel()
         stallTimer = nil
         stopFrameWatch()
@@ -1214,20 +1519,15 @@ final class CaptureSession: NSObject {
             self.stream = nil
             try? await stream.stopCapture()
         }
-        restoreWindowIfNeeded()
-        // restoreWindowIfNeeded only *fires* the AX move back to the real screen — the target app
-        // applies it asynchronously. Wait until it lands before marking this display available;
-        // otherwise a new session could lease it while the previous source still occupies it.
-        var hostIsReusable = true
-        if let axWindow, let originalFrame, let host = virtualDisplayHost {
-            let settledFrame = await Self.waitForFrameToSettle(axWindow: axWindow, fallback: originalFrame)
+        let settledFrame = await restoreWindowOntoPhysicalDisplay()
+        // Wait for a verified restore before marking this display available; otherwise a new
+        // session could lease it while the previous source still occupies it.
+        var hostIsReusable = virtualDisplayHost == nil
+        if let settledFrame, let host = virtualDisplayHost {
             // An app that rejected the restore may still be sitting on this virtual desktop. Do
             // not hand that desktop to another session, whose display-wide stream could otherwise
             // include the stale window. Exceptional failed restores discard just this slot.
-            let overlap = settledFrame.intersection(host.bounds)
-            let overlapArea = overlap.isNull ? 0 : overlap.width * overlap.height
-            let windowArea = max(settledFrame.width * settledFrame.height, 1)
-            hostIsReusable = overlapArea / windowArea < 0.5
+            hostIsReusable = !Self.frameOccupiesVirtualDisplay(settledFrame, host: host)
         }
         var hostBeingReleased = virtualDisplayHost
         virtualDisplayHost = nil
@@ -1253,16 +1553,166 @@ final class CaptureSession: NSObject {
     /// Moves the source window back to its pre-session position — used both on session stop and
     /// by enterSourceActiveState() (M3), so it reappears on the user's real screen.
     func restoreWindowIfNeeded() {
-        guard let axWindow, let originalFrame else { return }
-        AXWindowLocator.setFrame(originalFrame, on: axWindow)
+        guard let originalFrame else { return }
+        guard !sourceOccupiesFullVirtualDisplay(),
+              let liveFrame = AXWindowLocator.currentFrame(ofWindowID: windowInfo.id),
+              let liveWindow = AXWindowLocator.locate(
+                ownerPID: windowInfo.ownerPID,
+                approximateFrame: liveFrame,
+                title: windowInfo.title
+              ) else {
+            Task { [weak self] in _ = await self?.restoreWindowOntoPhysicalDisplay() }
+            return
+        }
+        axWindow = liveWindow
+        AXWindowLocator.setFrame(originalFrame, on: liveWindow)
     }
 
-    /// The source window's live on-screen frame (Quartz space), used by InteractionForwarder to
-    /// map a PiP-panel click onto the window's actual current position on the virtual display.
-    /// Re-queried live via AX rather than cached, in case the window resizes/moves on its own.
-    func currentSourceWindowFrame() -> CGRect? {
-        guard let axWindow else { return nil }
-        return AXWindowLocator.frame(of: axWindow)
+    /// Leaves a native fullscreen Space before restoring geometry. macOS ignores AX position and
+    /// size writes while AXFullScreen is true, which previously stranded the source window on the
+    /// private desktop when the PiP was closed.
+    private func restoreWindowOntoPhysicalDisplay() async -> CGRect? {
+        guard let originalFrame else { return nil }
+        let cachedWindow = axWindow
+
+        // Fullscreen may create a replacement/companion AX element. Exit every fullscreen element
+        // from this PID that actually occupies this session's private display, not every window of
+        // the app and not only the stale element cached before the transition.
+        let fullscreenWindows = AXWindowLocator.windows(ownerPID: windowInfo.ownerPID).filter { window in
+            guard AXWindowLocator.isFullScreen(window) else { return false }
+            if let cachedWindow, CFEqual(cachedWindow, window) { return true }
+            guard let frame = AXWindowLocator.frame(of: window), let host = virtualDisplayHost else {
+                return false
+            }
+            return Self.frameOccupiesVirtualDisplay(frame, host: host)
+        }
+        for window in fullscreenWindows {
+            let result = AXWindowLocator.setFullScreen(false, on: window)
+            debugTrace(
+                "fullscreen: stop requested exit windowID=\(windowInfo.id) axError=\(result.rawValue) "
+                + "candidateFrame=\(AXWindowLocator.frame(of: window) ?? .zero)"
+            )
+        }
+
+        // AXFullScreen can flip to false before the Space-closing animation releases geometry
+        // writes. More importantly, the pre-transition AX element can report the requested frame
+        // even while the real CGWindowID remains on the private display. Re-query that original
+        // WindowServer identity on every pass, locate its current AX peer by the fresh frame, and
+        // verify the WindowServer frame itself before declaring the restore complete.
+        var lastReadableFrame: CGRect?
+        var previousPhysicalFrame: CGRect?
+        for attempt in 0..<60 {
+            let serverFrame = AXWindowLocator.currentFrame(ofWindowID: windowInfo.id)
+            let liveWindow = serverFrame.flatMap {
+                AXWindowLocator.locate(
+                    ownerPID: windowInfo.ownerPID,
+                    approximateFrame: $0,
+                    title: windowInfo.title
+                )
+            }
+
+            if let liveWindow {
+                axWindow = liveWindow
+                if AXWindowLocator.isFullScreen(liveWindow) {
+                    _ = AXWindowLocator.setFullScreen(false, on: liveWindow)
+                }
+                AXWindowLocator.setFrame(originalFrame, on: liveWindow)
+            } else if attempt.isMultiple(of: 4), let cachedWindow {
+                // Useful during the short interval where WindowServer temporarily removes the
+                // original CGWindowID while closing its fullscreen companion.
+                if AXWindowLocator.isFullScreen(cachedWindow) {
+                    _ = AXWindowLocator.setFullScreen(false, on: cachedWindow)
+                }
+                AXWindowLocator.setFrame(originalFrame, on: cachedWindow)
+            }
+            try? await Task.sleep(nanoseconds: 100_000_000)
+            guard let current = AXWindowLocator.currentFrame(ofWindowID: windowInfo.id)
+                    ?? liveWindow.flatMap({ AXWindowLocator.frame(of: $0) }) else { continue }
+            lastReadableFrame = current
+
+            let isOffManagedDisplay = virtualDisplayHost.map {
+                !Self.frameOccupiesVirtualDisplay(current, host: $0)
+            } ?? true
+            guard isOffManagedDisplay else {
+                previousPhysicalFrame = nil
+                continue
+            }
+
+            if Self.isApproximatelyEqual(current, originalFrame)
+                || previousPhysicalFrame.map({ Self.isApproximatelyEqual($0, current) }) == true {
+                debugTrace(
+                    "fullscreen: restored source windowID=\(windowInfo.id) "
+                    + "target=\(originalFrame) settled=\(current) attempts=\(attempt + 1)"
+                )
+                return current
+            }
+            previousPhysicalFrame = current
+        }
+
+        let settled = lastReadableFrame
+        debugTrace(
+            "fullscreen: restore timed out windowID=\(windowInfo.id) target=\(originalFrame) "
+            + "lastReadable=\(settled ?? .zero)"
+        )
+        return settled
+    }
+
+    private static func frameOccupiesVirtualDisplay(_ frame: CGRect, host: VirtualDisplayHost) -> Bool {
+        let logicalFrame = host.bounds
+        let rawFrame = CGRect(origin: logicalFrame.origin, size: host.captureCanvasSize)
+        let area = max(frame.width * frame.height, 1)
+        return [logicalFrame, rawFrame].contains { displayFrame in
+            let overlap = frame.intersection(displayFrame)
+            let overlapArea = overlap.isNull ? 0 : overlap.width * overlap.height
+            return overlapArea / area >= 0.5
+        }
+    }
+
+    /// The exact global region represented by the pixels in the PiP.
+    ///
+    /// This is deliberately not always the source window's complete AX frame. ScreenCaptureKit
+    /// captures `framedRect` only after the same corner inset and display-bound intersection used
+    /// by `makeConfiguration`. Bilibili and RedNote can report AX windows taller than the private
+    /// display; their lower edge is therefore absent from the stream. Mapping the visible PiP
+    /// against that untrimmed AX height made the error grow toward the bottom of the panel and
+    /// could turn RedNote's in-app fullscreen click into a hit on macOS window chrome.
+    func currentCapturedContentFrame() -> CGRect? {
+        guard let host = virtualDisplayHost else { return nil }
+
+        let displaySize: CGSize
+        let localWindowRect: CGRect
+        if isSourceNativeFullScreen {
+            displaySize = host.captureCanvasSize
+            localWindowRect = framedRect
+        } else {
+            displaySize = host.bounds.size
+            if let axWindow, let liveFrame = AXWindowLocator.frame(of: axWindow) {
+                localWindowRect = CGRect(
+                    x: liveFrame.minX - host.bounds.minX,
+                    y: liveFrame.minY - host.bounds.minY,
+                    width: liveFrame.width,
+                    height: liveFrame.height
+                )
+            } else {
+                localWindowRect = framedRect
+            }
+        }
+
+        return Self.globalCaptureFrame(
+            localRect: localWindowRect,
+            displayOrigin: host.bounds.origin,
+            displaySize: displaySize
+        )
+    }
+
+    /// Aspect ratio consumed by PiPVideoLayerView must come from the same crop as interaction
+    /// mapping. Using framedRect.size here distorted the displayed-video geometry whenever an app
+    /// extended beyond a virtual-display edge, even though the sample buffer only contained the
+    /// clipped intersection.
+    func currentCapturedContentSize() -> CGSize {
+        guard let host = virtualDisplayHost else { return framedRect.size }
+        let displaySize = isSourceNativeFullScreen ? host.captureCanvasSize : host.bounds.size
+        return Self.captureSourceRect(for: framedRect, displaySize: displaySize).size
     }
 
     /// Identity check used by PiPSessionManager's virtual-display intrusion guard. Comparing the
@@ -1273,15 +1723,51 @@ final class CaptureSession: NSObject {
         return CFEqual(axWindow, candidate)
     }
 
-    private func applyConfiguration() async throws {
-        guard let stream, let host = virtualDisplayHost else { return }
-        let config = Self.makeConfiguration(
+    /// The fullscreen companion window can be a different AX element from `axWindow`. The
+    /// intrusion guard uses this source-level state together with the PID so it does not require
+    /// an identity match that native fullscreen does not preserve.
+    func sourceIsNativeFullScreen() -> Bool {
+        isSourceNativeFullScreen || sourceOccupiesFullVirtualDisplay()
+    }
+
+    private func sourceOccupiesFullVirtualDisplay(
+        axWindow: AXUIElement? = nil,
+        host: VirtualDisplayHost? = nil
+    ) -> Bool {
+        guard let window = axWindow ?? self.axWindow,
+              let host = host ?? virtualDisplayHost else { return false }
+        if AXWindowLocator.isFullScreen(window) { return true }
+        guard let frame = AXWindowLocator.frame(of: window) else { return false }
+        return Self.isFullVirtualDisplayFrame(
+            frame,
+            displayOrigin: host.bounds.origin,
+            displayPixelSize: host.captureCanvasSize
+        )
+    }
+
+    private func captureConfiguration(for host: VirtualDisplayHost) -> SCStreamConfiguration {
+        let displaySize: CGSize
+        let pixelScale: CGSize
+        if isSourceNativeFullScreen {
+            // Fullscreen CGVirtualDisplay surfaces are already expressed in backing pixels.
+            displaySize = host.captureCanvasSize
+            pixelScale = CGSize(width: 1, height: 1)
+        } else {
+            displaySize = host.bounds.size
+            pixelScale = host.pixelsPerPoint
+        }
+        return Self.makeConfiguration(
             for: framedRect,
-            displaySize: host.bounds.size,
-            displayPixelScale: host.pixelsPerPoint,
+            displaySize: displaySize,
+            displayPixelScale: pixelScale,
             fps: effectiveTargetFPS,
             maxLongEdge: maxOutputLongEdge
         )
+    }
+
+    private func applyConfiguration() async throws {
+        guard let stream, let host = virtualDisplayHost else { return }
+        let config = captureConfiguration(for: host)
         try await stream.updateConfiguration(config)
     }
 
@@ -1298,21 +1784,7 @@ final class CaptureSession: NSObject {
         config.minimumFrameInterval = CMTime(value: 1, timescale: CMTimeScale(max(fps, 1)))
         config.queueDepth = 5
 
-        // Crop to just the window's rect within the virtual display, so the surrounding
-        // wallpaper/menu bar that every display (real or virtual) renders doesn't show up. Inset
-        // a few points past that: macOS gives every window (even this app's own panel) a small
-        // native corner radius at the window-server level, but localRect is the window's plain
-        // rectangular AX frame with no awareness of that rounding — the crop was landing right up
-        // against the true edge, so each corner's few rounded-away pixels showed through as a
-        // small black (or wallpaper-colored) triangle. Only became visible once PiP-panel resizing
-        // started actually reaching the real window size (previously the resize never landed at
-        // all, so the crop was always relative to whatever the window's original, unmoved rect
-        // was). A fixed inset crops a sliver of genuine content on all four edges, not just the
-        // corners, but that's a far smaller cosmetic cost than a black corner.
-        let cornerRadiusInset: CGFloat = 6
-        let insetRect = localRect.insetBy(dx: cornerRadiusInset, dy: cornerRadiusInset)
-        let clamped = insetRect.intersection(CGRect(origin: .zero, size: displaySize))
-        let sourceRect = clamped.isEmpty ? CGRect(origin: .zero, size: displaySize) : clamped
+        let sourceRect = captureSourceRect(for: localRect, displaySize: displaySize)
         config.sourceRect = sourceRect
 
         let outputSize = outputPixelSize(
@@ -1323,6 +1795,38 @@ final class CaptureSession: NSObject {
         config.width = Int(outputSize.width)
         config.height = Int(outputSize.height)
         return config
+    }
+
+    /// Crops to just the window's rect within the virtual display, so the surrounding
+    /// wallpaper/menu bar that every display (real or virtual) renders doesn't show up. Insets a
+    /// few points past that because macOS gives windows a small WindowServer corner radius while
+    /// the AX frame remains rectangular. The display intersection is equally important: apps
+    /// such as Bilibili and RedNote can report a window larger than the capture canvas.
+    static func captureSourceRect(for localRect: CGRect, displaySize: CGSize) -> CGRect {
+        let cornerRadiusInset: CGFloat = 6
+        let fullDisplayRect = CGRect(origin: .zero, size: displaySize)
+        let capturesWholeDisplay = isApproximatelyEqual(localRect, fullDisplayRect)
+        // A native-fullscreen surface has no rounded window corners. Applying the ordinary 6pt
+        // inset here would reintroduce the exact bug this mode fixes by trimming all four edges.
+        let insetRect = capturesWholeDisplay
+            ? localRect
+            : localRect.insetBy(dx: cornerRadiusInset, dy: cornerRadiusInset)
+        let clamped = insetRect.intersection(CGRect(origin: .zero, size: displaySize))
+        return clamped.isEmpty ? fullDisplayRect : clamped
+    }
+
+    static func globalCaptureFrame(
+        localRect: CGRect,
+        displayOrigin: CGPoint,
+        displaySize: CGSize
+    ) -> CGRect {
+        let sourceRect = captureSourceRect(for: localRect, displaySize: displaySize)
+        return CGRect(
+            x: displayOrigin.x + sourceRect.minX,
+            y: displayOrigin.y + sourceRect.minY,
+            width: sourceRect.width,
+            height: sourceRect.height
+        )
     }
 
     /// Converts ScreenCaptureKit's point-space crop into backing pixels before applying the
@@ -1372,7 +1876,11 @@ extension CaptureSession: SCStreamOutput {
         }
 
         lastFrameDate = Date()
-        delegate?.captureSession(self, didOutput: sampleBuffer)
+        let nativeSize = currentCapturedContentSize()
+        framePresenter.submit(
+            sampleBuffer,
+            nativeSize: nativeSize.width > 0 ? nativeSize : windowInfo.frame.size
+        )
     }
 }
 

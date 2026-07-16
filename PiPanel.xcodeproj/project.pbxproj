@@ -14,6 +14,7 @@
 		9869CACF1E37143E6B4FC4AF /* PiPCloseCornerControl.swift in Sources */ = {isa = PBXBuildFile; fileRef = 18498B75E19FA1B0F4A8FD7D /* PiPCloseCornerControl.swift */; };
 		59F5EDF56590D018B62286A1 /* EdgeHandleWindow.swift in Sources */ = {isa = PBXBuildFile; fileRef = FFF3BF5D03A8538AD5D82E75 /* EdgeHandleWindow.swift */; };
 		03B56D060B9A2F0F14B4D986 /* Assets.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = F0696A05B45A15E460D3AA48 /* Assets.xcassets */; };
+		D7B0A4D10000000000000002 /* TutorialVideos in Resources */ = {isa = PBXBuildFile; fileRef = D7B0A4D10000000000000001 /* TutorialVideos */; };
 		C32430CD0A7FB6A12C46D05C /* MediaRemoteAdapter in Resources */ = {isa = PBXBuildFile; fileRef = D7204871288AB98604689EB8 /* MediaRemoteAdapter */; };
 		22645B899ABB60C67C45F3C6 /* LyricsModels.swift in Sources */ = {isa = PBXBuildFile; fileRef = 303910C89D6976713CE4C0F6 /* LyricsModels.swift */; };
 		7608C49751E783D54C7E8499 /* NowPlayingMonitor.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4C5A09B4619515FCDED8C702 /* NowPlayingMonitor.swift */; };
@@ -93,6 +94,7 @@
 		A6E8C11D73B847FA91D40002 /* AdvancedSettingsView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AdvancedSettingsView.swift; sourceTree = "<group>"; };
 		01AF7CBFFD520347D21462D6 /* PiPanelLogger.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PiPanelLogger.swift; sourceTree = "<group>"; };
 		D7204871288AB98604689EB8 /* MediaRemoteAdapter */ = {isa = PBXFileReference; lastKnownFileType = folder; path = MediaRemoteAdapter; sourceTree = "<group>"; };
+		D7B0A4D10000000000000001 /* TutorialVideos */ = {isa = PBXFileReference; lastKnownFileType = folder; path = TutorialVideos; sourceTree = "<group>"; };
 		303910C89D6976713CE4C0F6 /* LyricsModels.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LyricsModels.swift; sourceTree = "<group>"; };
 		4C5A09B4619515FCDED8C702 /* NowPlayingMonitor.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = NowPlayingMonitor.swift; sourceTree = "<group>"; };
 		159D8F533775EA145D261B54 /* LRCParser.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LRCParser.swift; sourceTree = "<group>"; };
@@ -356,6 +358,7 @@
 			isa = PBXGroup;
 			children = (
 				F0696A05B45A15E460D3AA48 /* Assets.xcassets */,
+				D7B0A4D10000000000000001 /* TutorialVideos */,
 			);
 			path = Resources;
 			sourceTree = "<group>";
@@ -458,6 +461,7 @@
 			buildActionMask = 2147483647;
 			files = (
 				03B56D060B9A2F0F14B4D986 /* Assets.xcassets in Resources */,
+				D7B0A4D10000000000000002 /* TutorialVideos in Resources */,
 				C32430CD0A7FB6A12C46D05C /* MediaRemoteAdapter in Resources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
@@ -628,7 +632,7 @@
 				CLANG_WARN__DUPLICATE_METHOD_MATCH = YES;
 				CODE_SIGN_STYLE = Automatic;
 				COPY_PHASE_STRIP = NO;
-				CURRENT_PROJECT_VERSION = 1;
+				CURRENT_PROJECT_VERSION = 2;
 				DEBUG_INFORMATION_FORMAT = "dwarf-with-dsym";
 				DEVELOPMENT_TEAM = "";
 				ENABLE_HARDENED_RUNTIME = YES;
@@ -643,7 +647,7 @@
 				GCC_WARN_UNUSED_FUNCTION = YES;
 				GCC_WARN_UNUSED_VARIABLE = YES;
 				MACOSX_DEPLOYMENT_TARGET = 14.0;
-				MARKETING_VERSION = 1.0.0;
+				MARKETING_VERSION = 1.0.1;
 				MTL_ENABLE_DEBUG_INFO = NO;
 				MTL_FAST_MATH = YES;
 				PRODUCT_NAME = "$(TARGET_NAME)";
@@ -707,7 +711,7 @@
 				CLANG_WARN__DUPLICATE_METHOD_MATCH = YES;
 				CODE_SIGN_STYLE = Automatic;
 				COPY_PHASE_STRIP = NO;
-				CURRENT_PROJECT_VERSION = 1;
+				CURRENT_PROJECT_VERSION = 2;
 				DEBUG_INFORMATION_FORMAT = dwarf;
 				DEVELOPMENT_TEAM = "";
 				ENABLE_HARDENED_RUNTIME = YES;
@@ -728,7 +732,7 @@
 				GCC_WARN_UNUSED_FUNCTION = YES;
 				GCC_WARN_UNUSED_VARIABLE = YES;
 				MACOSX_DEPLOYMENT_TARGET = 14.0;
-				MARKETING_VERSION = 1.0.0;
+				MARKETING_VERSION = 1.0.1;
 				MTL_ENABLE_DEBUG_INFO = INCLUDE_SOURCE;
 				MTL_FAST_MATH = YES;
 				ONLY_ACTIVE_ARCH = YES;

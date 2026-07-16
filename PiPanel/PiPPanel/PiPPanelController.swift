@@ -23,6 +23,11 @@ private final class InteractivePiPPanel: NSPanel {
 @MainActor
 final class PiPPanelController: NSObject {
     weak var delegate: PiPPanelControllerDelegate?
+    /// Keeps capture cadence aligned with the screen that actually presents this panel. A PiP may
+    /// be dragged from a 120/144 Hz display onto a 60 Hz display (or the reverse) after creation.
+    var onPresentationDisplayMaximumFPSChanged: ((Int) -> Void)? {
+        didSet { reportPresentationDisplayMaximumFPSIfNeeded(force: true) }
+    }
     /// Setting this wires it up with the geometry (panel/videoView) it needs for cursor-capture
     /// coordinate math — see InteractionForwarder.attach(videoView:panel:) — and subscribes to
     /// CaptureSession discovering the source app's real minimum/maximum size (see
@@ -81,6 +86,7 @@ final class PiPPanelController: NSObject {
     /// Registered once at init so the state is already correct the instant hover reveals it.
     private var playbackControlsObserverId: UUID?
     private var hasMatchingVideoPlayback = false
+    private var lastReportedPresentationDisplayMaximumFPS: Int?
 
     init(initialFrame: NSRect, nativeSize: CGSize, windowTitle: String, sourceBundleIdentifier: String?) {
         self.sourceBundleIdentifier = sourceBundleIdentifier
@@ -109,6 +115,7 @@ final class PiPPanelController: NSObject {
 
         super.init()
 
+        panel.delegate = self
         panel.isFloatingPanel = true
         panel.hidesOnDeactivate = false
         panel.isOpaque = false
@@ -234,6 +241,16 @@ final class PiPPanelController: NSObject {
 
     func enqueue(_ sampleBuffer: CMSampleBuffer, nativeSize: CGSize) {
         videoView.enqueue(sampleBuffer, nativeSize: nativeSize)
+    }
+
+    private func reportPresentationDisplayMaximumFPSIfNeeded(force: Bool = false) {
+        let screen = panel.screen
+            ?? NSScreen.screens.first(where: { $0.frame.intersects(panel.frame) })
+            ?? NSScreen.main
+        let fps = DisplayRefreshRate.fps(for: screen)
+        guard force || fps != lastReportedPresentationDisplayMaximumFPS else { return }
+        lastReportedPresentationDisplayMaximumFPS = fps
+        onPresentationDisplayMaximumFPSChanged?(fps)
     }
 
     /// PiPSessionManager.stackAllSessions/unstackSessions call this on every session's controller
@@ -397,6 +414,12 @@ final class PiPPanelController: NSObject {
         // partially-outside content visible until the user next drags an edge.
         updateContentScalingMode()
         captureSession.resizeSourceWindow(to: panel.frame.size)
+    }
+}
+
+extension PiPPanelController: NSWindowDelegate {
+    func windowDidChangeScreen(_ notification: Notification) {
+        reportPresentationDisplayMaximumFPSIfNeeded()
     }
 }
 

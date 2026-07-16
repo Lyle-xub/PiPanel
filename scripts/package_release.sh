@@ -5,7 +5,7 @@ set -euo pipefail
 root_dir="$(cd "$(dirname "$0")/.." && pwd)"
 dist_dir="$root_dir/dist"
 derived_data="${PIPANEL_DERIVED_DATA:-/tmp/PiPanelReleaseDerivedData}"
-identity="${1:--}"
+identity="${1:-${PIPANEL_SIGN_IDENTITY:-}}"
 version="$(/usr/libexec/PlistBuddy -c 'Print :CFBundleShortVersionString' "$root_dir/PiPanel/App/Info.plist")"
 archive_name="PiPanel-${version}-macOS-universal"
 work_dir="$(mktemp -d /tmp/pipanel-release.XXXXXX)"
@@ -15,6 +15,34 @@ rw_dmg="$work_dir/PiPanel-rw.dmg"
 final_dmg="$dist_dir/$archive_name.dmg"
 final_zip="$dist_dir/$archive_name.zip"
 app_path="$dist_dir/PiPanel.app"
+app_icon="$app_path/Contents/Resources/AppIcon.icns"
+
+# A release signed ad hoc gets a designated requirement made only of its current CDHashes. The
+# next build therefore looks like a different application to macOS and causes every existing
+# Keychain item and privacy permission to ask for authorization again. Never silently produce a
+# distributable package with that identity. `--adhoc` remains available for explicit local-only
+# smoke testing, while production packaging auto-selects an installed Developer ID certificate.
+if [[ "$identity" == "--adhoc" ]]; then
+    identity="-"
+elif [[ -z "$identity" ]]; then
+    identity="$(
+        security find-identity -v -p codesigning \
+            | sed -n 's/.*"\(Developer ID Application:.*\)"/\1/p' \
+            | head -n 1
+    )"
+    if [[ -z "$identity" ]] && security find-identity -v -p codesigning \
+        | grep -F '"PiPanel Local Code Signing"' >/dev/null; then
+        identity="PiPanel Local Code Signing"
+        echo "Using local self-signed identity; this package cannot be notarized."
+    fi
+fi
+
+if [[ -z "$identity" ]]; then
+    echo "No Developer ID Application or PiPanel local signing identity is installed." >&2
+    echo "Install Developer ID, or run scripts/setup_local_signing_identity.sh once." >&2
+    echo "For a local-only build, explicitly pass --adhoc." >&2
+    exit 78
+fi
 
 cleanup() {
     # /tmp is a symlink to /private/tmp, so matching `mount` output against mount_dir is brittle.
@@ -60,7 +88,7 @@ swift -module-cache-path "$work_dir/swift-module-cache" \
     "$stage_dir/.background/background.png"
 ditto "$app_path" "$stage_dir/PiPanel.app"
 ln -s /Applications "$stage_dir/Applications"
-cp "$app_path/Contents/Resources/AppIcon.icns" "$stage_dir/.VolumeIcon.icns"
+cp "$app_icon" "$stage_dir/.VolumeIcon.icns"
 
 hdiutil create \
     -volname PiPanel \
@@ -76,10 +104,11 @@ hdiutil attach "$rw_dmg" \
     -noverify \
     -noautoopen >/dev/null
 
-if xcrun --find SetFile >/dev/null 2>&1; then
-    xcrun SetFile -a V "$mount_dir/.background" "$mount_dir/.VolumeIcon.icns"
-    xcrun SetFile -a C "$mount_dir"
-fi
+set_file="$(xcrun --find SetFile)"
+de_rez="$(xcrun --find DeRez)"
+rez="$(xcrun --find Rez)"
+"$set_file" -a V "$mount_dir/.background" "$mount_dir/.VolumeIcon.icns"
+"$set_file" -a C "$mount_dir"
 
 osascript <<APPLESCRIPT
 tell application "Finder"
@@ -88,9 +117,17 @@ tell application "Finder"
     delay 1
     set dmgWindow to container window of dmgFolder
     set current view of dmgWindow to icon view
-    set toolbar visible of dmgWindow to false
-    set statusbar visible of dmgWindow to false
-    set pathbar visible of dmgWindow to false
+    -- Finder occasionally reports these cosmetic properties as temporarily read-only while a
+    -- newly-mounted image is still settling. They must never abort an otherwise valid release.
+    try
+        set toolbar visible of dmgWindow to false
+    end try
+    try
+        set statusbar visible of dmgWindow to false
+    end try
+    try
+        set pathbar visible of dmgWindow to false
+    end try
     -- Finder's bounds include its 32 pt title bar; keep a full 660 × 420 content area visible.
     set bounds of dmgWindow to {120, 120, 780, 572}
     set viewOptions to icon view options of dmgWindow
@@ -102,13 +139,28 @@ tell application "Finder"
     set position of item "Applications" of dmgFolder to {488, 226}
     update dmgFolder without registering applications
     delay 2
-    close container window of dmgFolder
+    try
+        close dmgWindow
+    end try
 end tell
 APPLESCRIPT
 
 sync
 hdiutil detach "$mount_dir" >/dev/null
 hdiutil convert "$rw_dmg" -format UDZO -imagekey zlib-level=9 -ov -o "$final_dmg" >/dev/null
+hdiutil verify "$final_dmg" >/dev/null
+
+# `.VolumeIcon.icns` controls the icon of the mounted volume. Finder stores the icon of the DMG
+# file itself in a custom `icns` resource, so attach the same AppIcon there as well. This makes
+# locally distributed/copied release artifacts visually match PiPanel before they are mounted.
+cp "$app_icon" "$work_dir/AppIcon.icns"
+sips -i "$work_dir/AppIcon.icns" >/dev/null
+"$de_rez" -only icns "$work_dir/AppIcon.icns" > "$work_dir/AppIcon.r"
+(
+    cd "$work_dir"
+    "$rez" AppIcon.r -append -o "$final_dmg"
+)
+"$set_file" -a C "$final_dmg"
 hdiutil verify "$final_dmg" >/dev/null
 
 ditto -c -k --sequesterRsrc --keepParent "$app_path" "$final_zip"

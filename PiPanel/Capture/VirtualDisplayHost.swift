@@ -162,6 +162,35 @@ final class VirtualDisplayHost {
         )
     }
 
+    /// The coordinate extent ScreenCaptureKit exposes when a window fills this private display.
+    /// This is deliberately not `currentPixelSize`: that value is only the mode passed to the
+    /// private CGVirtualDisplay API. With a 1280×800 HiDPI mode, WindowServer still registers a
+    /// 2560×1600 capture surface and fullscreen AX windows report exactly 2560×1600. The runtime
+    /// registration is therefore the authoritative full-display crop size.
+    var captureCanvasSize: CGSize {
+        let registeredSize = CGDisplayBounds(displayID).size
+        return Self.captureCanvasSize(
+            registeredSize: registeredSize,
+            fallbackModeSize: currentPixelSize
+        )
+    }
+
+    static func captureCanvasSize(
+        registeredSize: CGSize,
+        fallbackModeSize: CGSize
+    ) -> CGSize {
+        guard registeredSize.width > 0, registeredSize.height > 0 else {
+            return fallbackModeSize
+        }
+        // CGDisplayBounds can expose a larger fixed HiDPI backing canvas than the selected mode,
+        // but it stays stale when resize(pixelWidth:pixelHeight:) later grows that mode. Preserve
+        // whichever source reports the larger live capacity on each axis.
+        return CGSize(
+            width: max(registeredSize.width, fallbackModeSize.width),
+            height: max(registeredSize.height, fallbackModeSize.height)
+        )
+    }
+
     /// The backing-pixel density ScreenCaptureKit must use when converting a crop expressed in
     /// desktop points into an output buffer expressed in pixels. On the virtual HiDPI display this
     /// is normally 2×; exposing it separately keeps window placement in points while preserving
@@ -187,6 +216,38 @@ final class VirtualDisplayHost {
         return CGSize(
             width: registeredSize.width / descriptorPixelSize.width,
             height: registeredSize.height / descriptorPixelSize.height
+        )
+    }
+
+    /// Returns the smallest 16:10 backing-pixel mode that can expose `requiredCoordinateSize`
+    /// in AX/Quartz point space, without shrinking an already-larger active mode. PiPanel's
+    /// descriptor has a fixed 2560×1600 ceiling and every mode uses the same calibrated
+    /// points-per-pixel conversion, so this is the inverse of `coordinateSize`.
+    static func pixelSizeFitting(
+        coordinateSize requiredCoordinateSize: CGSize,
+        pointsPerPixel: CGSize,
+        minimumPixelSize: CGSize
+    ) -> CGSize? {
+        guard requiredCoordinateSize.width > 0, requiredCoordinateSize.height > 0,
+              pointsPerPixel.width > 0, pointsPerPixel.height > 0 else { return nil }
+
+        let requiredPixelWidth = requiredCoordinateSize.width / pointsPerPixel.width
+        let requiredPixelHeight = requiredCoordinateSize.height / pointsPerPixel.height
+        let aspect = CGFloat(maxPixelsWide) / CGFloat(maxPixelsHigh)
+        let requiredLongEdge = max(requiredPixelWidth, requiredPixelHeight * aspect)
+        let targetWidth = ceil(max(requiredLongEdge, minimumPixelSize.width))
+        let targetHeight = ceil(targetWidth / aspect)
+
+        guard targetWidth <= CGFloat(maxPixelsWide),
+              targetHeight <= CGFloat(maxPixelsHigh) else { return nil }
+        return CGSize(width: targetWidth, height: targetHeight)
+    }
+
+    func pixelSizeFitting(coordinateSize: CGSize) -> CGSize? {
+        Self.pixelSizeFitting(
+            coordinateSize: coordinateSize,
+            pointsPerPixel: pointsPerPixel,
+            minimumPixelSize: currentPixelSize
         )
     }
 
