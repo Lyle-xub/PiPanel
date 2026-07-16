@@ -54,7 +54,7 @@
 	<key>SUFeedURL</key>
 	<string>https://pipanel.app/appcast.xml</string>
 	<key>SUPublicEDKey</key>
-	<string>+YbQeYLoJCDoNKhe6Jv4NxA87tcPOKrAO4O4dGO7RjQ=</string>
+	<string>pRSOI6S2OnpRBJh3yGrM6KDnvVRfIYTjxMN9v+g6te4=</string>
 	<key>SUScheduledCheckInterval</key>
 	<integer>86400</integer>
 	<key>SUVerifyUpdateBeforeExtraction</key>
