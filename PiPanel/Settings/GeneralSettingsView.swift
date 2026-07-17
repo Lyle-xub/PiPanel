@@ -3,57 +3,106 @@ import SwiftUI
 struct GeneralSettingsView: View {
     @ObservedObject private var settings = SettingsStore.shared
     @ObservedObject private var launchAtLogin = LaunchAtLoginManager.shared
-    @ObservedObject private var membership = MembershipManager.shared
+
+    var body: some View {
+        SettingsPage {
+            SettingsPageIntro(
+                title: "从这里开始",
+                detail: "设置 PiPanel 如何启动，以及你最常用的画中画触发方式。"
+            )
+
+            SettingsGroup("启动", detail: "登录 Mac 后随时可用", icon: "power", tint: .green) {
+                SettingsToggleRow(
+                    "开机启动",
+                    detail: "登录后自动在菜单栏运行 PiPanel",
+                    icon: "arrow.up.forward.app.fill",
+                    tint: .green,
+                    isOn: Binding(
+                        get: { launchAtLogin.isEnabled },
+                        set: { launchAtLogin.setEnabled($0) }
+                    )
+                )
+
+                if let error = launchAtLogin.lastError {
+                    SettingsRowDivider()
+                    Text(error)
+                        .font(.system(size: 10.5))
+                        .foregroundStyle(.red)
+                        .padding(.horizontal, 17)
+                        .padding(.vertical, 10)
+                }
+            }
+
+            MembershipGate {
+                SettingsGroup(
+                    "启动画中画",
+                    detail: "选择把普通窗口变成画中画的动作",
+                    icon: "pip.enter",
+                    tint: SettingsTheme.indigo
+                ) {
+                    SettingsControlRow(
+                        "启动方式",
+                        detail: activationMethodDescription,
+                        icon: "cursorarrow.click.2",
+                        tint: SettingsTheme.indigo
+                    ) {
+                        SettingsSegmentedControl(
+                            options: [.cornerSwitch, .shake],
+                            selection: $settings.pipActivationMethod,
+                            label: { $0.displayName }
+                        )
+                    }
+                }
+            }
+        }
+    }
+
+    private var activationMethodDescription: String {
+        switch settings.pipActivationMethod {
+        case .cornerSwitch:
+            "鼠标移到任意窗口右上角，点击浮现的按钮"
+        case .shake:
+            "拖住窗口快速来回摇动"
+        }
+    }
+}
+
+/// Capture quality has its own page: these controls all trade image fidelity for GPU, memory and
+/// display bandwidth, so putting them beside startup/automation made the old General page hard to
+/// scan and easy to misconfigure.
+struct PictureSettingsView: View {
+    @ObservedObject private var settings = SettingsStore.shared
     @State private var maximumDisplayFPS = DisplayRefreshRate.maximumPhysicalFPS()
 
     var body: some View {
-        Form {
-            Section {
-                Toggle("开机启动", isOn: Binding(
-                    get: { launchAtLogin.isEnabled },
-                    set: { launchAtLogin.setEnabled($0) }
-                ))
+        SettingsPage {
+            SettingsPageIntro(
+                title: "画面质量与性能",
+                detail: "较低设置更省电；较高设置让文字、视频和动画更加清晰流畅。"
+            )
 
-                if let error = launchAtLogin.lastError {
-                    Text(error)
-                        .font(.caption)
-                        .foregroundStyle(.red)
-                }
-            }
-
-            Section("启动画中画") {
-                Picker("启动方式", selection: activationMethodBinding) {
-                    Text(PiPActivationMethod.cornerSwitch.displayName)
-                        .tag(PiPActivationMethod.cornerSwitch)
-                    Text(PiPActivationMethod.shake.displayName)
-                        .tag(PiPActivationMethod.shake)
-                }
-
-                Text(activationMethodDescription)
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
-            }
-            // Choosing a non-default activation gesture is a Pro customization just like the
-            // capture/appearance controls below. MembershipManager.isMember deliberately covers
-            // both a live seven-day trial and a permanent license. Free users still *use* the
-            // corner switch (observeActivationMethod resolves to it), but cannot change this row.
-            .disabled(!membership.isMember)
-            .opacity(membership.isMember ? 1 : 0.4)
-
-            // Capture/appearance customization below still requires an active membership.
             MembershipGate {
-                Section("画面") {
+                SettingsGroup(
+                    "捕获质量",
+                    detail: "对已打开的画中画立即生效",
+                    icon: "display",
+                    tint: .blue
+                ) {
                     SliderSettingRow(
                         title: "画面帧率",
                         valueText: "\(settings.targetFPS) fps",
+                        icon: "speedometer",
+                        tint: .blue,
                         value: Binding(
                             get: { Double(settings.targetFPS) },
                             set: { settings.targetFPS = Int($0) }
                         ),
                         range: Double(DisplayRefreshRate.minimumSelectableFPS)...Double(maximumDisplayFPS),
                         step: 1,
-                        hint: "最高可达当前显示器刷新率；画中画移动到不同显示器后会自动匹配该屏幕的刷新率"
+                        hint: "最高匹配当前显示器刷新率"
                     )
+
+                    SettingsRowDivider()
 
                     SliderSettingRow(
                         title: "虚拟显示器分辨率",
@@ -61,76 +110,32 @@ struct GeneralSettingsView: View {
                             let size = VirtualDisplayHost.pixelSize(forLongEdge: settings.virtualDisplayLongEdge)
                             return "\(size.width) × \(size.height)"
                         }(),
+                        icon: "display",
+                        tint: .indigo,
                         value: $settings.virtualDisplayLongEdge,
                         range: SettingsStore.minimumVirtualDisplayLongEdge...SettingsStore.maximumVirtualDisplayLongEdge,
                         step: 128,
-                        hint: "决定画中画的最大可用空间；较低分辨率更省资源，必要时会自动扩展以容纳源窗口"
+                        hint: "决定源窗口可用空间；必要时会自动扩展"
                     )
+
+                    SettingsRowDivider()
 
                     SliderSettingRow(
                         title: "画面清晰度",
                         valueText: "\(Int(settings.captureOutputLongEdge)) px",
+                        icon: "sparkles",
+                        tint: .purple,
                         value: $settings.captureOutputLongEdge,
                         range: 640...2560,
                         step: 160,
-                        hint: "数值越高画面越清晰，但更耗性能和带宽；对已打开的画中画立即生效"
+                        hint: "提高数值会增加显存、带宽和编码开销"
                     )
                 }
 
-                Section("自动化") {
-                    Toggle("源软件被激活时自动隐藏画中画", isOn: $settings.autoHideWhenSourceActive)
-                    Toggle("点击/输入后自动归还键盘焦点", isOn: $settings.autoReturnEnabled)
-
-                    if settings.autoReturnEnabled {
-                        SliderSettingRow(
-                            title: "归还延迟",
-                            valueText: String(format: "%.1fs", settings.autoReturnIdleInterval),
-                            value: $settings.autoReturnIdleInterval,
-                            range: 0.5...5,
-                            step: 0.5
-                        )
-                    }
-
-                    Toggle("长时间无操作时自动堆叠贴边", isOn: $settings.autoStackOnIdleEnabled)
-
-                    if settings.autoStackOnIdleEnabled {
-                        SliderSettingRow(
-                            title: "无操作时长",
-                            valueText: idleIntervalLabel,
-                            value: $settings.autoStackIdleInterval,
-                            range: 10...300,
-                            step: 10
-                        )
-                    }
-
-                    Text("鼠标键盘长时间无任何操作后，自动把所有画中画堆叠到默认堆叠角落")
-                        .font(.caption)
-                        .foregroundStyle(.secondary)
-                }
-
-                Section("画中画默认设置") {
-                    SliderSettingRow(
-                        title: "默认画中画宽度",
-                        valueText: "\(Int(settings.defaultPanelWidth)) pt",
-                        value: $settings.defaultPanelWidth,
-                        range: 240...600,
-                        step: 10,
-                        hint: "仅影响新建的画中画，不会改变已打开的窗口"
-                    )
-
-                    Picker("默认堆叠角落", selection: $settings.defaultStackingCorner) {
-                        ForEach(PanelCorner.allCases) { corner in
-                            Text(corner.displayName).tag(corner)
-                        }
-                    }
-                }
-
+                SettingsHint("如果感觉电脑发热或掉帧，优先降低画面清晰度和虚拟显示器分辨率。")
             }
         }
-        .settingsPageFormStyle()
-        .onAppear {
-            refreshMaximumDisplayFPS()
-        }
+        .onAppear { refreshMaximumDisplayFPS() }
         .onReceive(NotificationCenter.default.publisher(for: NSApplication.didChangeScreenParametersNotification)) { _ in
             refreshMaximumDisplayFPS()
         }
@@ -145,44 +150,5 @@ struct GeneralSettingsView: View {
             max(settings.targetFPS, DisplayRefreshRate.minimumSelectableFPS),
             maximumDisplayFPS
         )
-    }
-
-    /// "10秒到几分钟不等" — plain seconds reads fine at the low end of autoStackIdleInterval's
-    /// range but turns unreadable past a minute or two (e.g. "180s"), so this switches to a
-    /// minutes+seconds phrasing once it crosses 60, matching how the feature was actually asked
-    /// for rather than just echoing the raw slider value like every other slider here does.
-    private var idleIntervalLabel: String {
-        let totalSeconds = Int(settings.autoStackIdleInterval)
-        guard totalSeconds >= 60 else { return "\(totalSeconds)秒" }
-        let minutes = totalSeconds / 60
-        let remainder = totalSeconds % 60
-        return remainder == 0 ? "\(minutes)分钟" : "\(minutes)分\(remainder)秒"
-    }
-
-    private var activationMethodBinding: Binding<PiPActivationMethod> {
-        Binding(
-            // If a previous trial saved Shake and then expired/cancelled, show the gesture that is
-            // actually active instead of leaving a disabled Picker misleadingly displaying Shake.
-            // The saved preference itself remains intact and becomes available again if Pro is
-            // later activated.
-            get: { effectiveActivationMethod },
-            set: { method in
-                guard membership.isMember else { return }
-                settings.pipActivationMethod = method
-            }
-        )
-    }
-
-    private var effectiveActivationMethod: PiPActivationMethod {
-        settings.pipActivationMethod.resolved(hasProAccess: membership.isMember)
-    }
-
-    private var activationMethodDescription: String {
-        switch effectiveActivationMethod {
-        case .cornerSwitch:
-            return "将鼠标移到任意窗口右上角，悬停开关出现后点击即可进入画中画。"
-        case .shake:
-            return "拖住窗口快速来回摇动，即可将它转换为画中画。"
-        }
     }
 }

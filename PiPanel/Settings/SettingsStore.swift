@@ -116,8 +116,8 @@ final class SettingsStore: ObservableObject {
     /// different value after the user presses reset.
     enum DefaultValues {
         static let targetFPS = 15
-        static let virtualDisplayLongEdge = 1664.0
-        static let captureOutputLongEdge = 960.0
+        static let virtualDisplayLongEdge = 1920.0
+        static let captureOutputLongEdge = 1280.0
         static let autoReturnEnabled = false
         static let autoReturnIdleInterval = 1.5
         static let autoStackOnIdleEnabled = false
@@ -134,6 +134,7 @@ final class SettingsStore: ObservableObject {
         static let stackCascadeMargin = 24.0
         static let stackMaxVisibleDepth = 5.0
         static let panelAppearRippleEnabled = true
+        static let controlModeGlowEnabled = true
         static let panelBackgroundColorHex = "000000"
         static let panelBorderStyle = PanelBorderStyle.none
         static let panelBorderColorHex = "FFFFFF"
@@ -187,6 +188,7 @@ final class SettingsStore: ObservableObject {
         static let stackCascadeMargin = "settings.stackCascadeMargin"
         static let stackMaxVisibleDepth = "settings.stackMaxVisibleDepth"
         static let panelAppearRippleEnabled = "settings.panelAppearRippleEnabled"
+        static let controlModeGlowEnabled = "settings.controlModeGlowEnabled"
         static let panelBackgroundColorHex = "settings.panelBackgroundColorHex"
         static let panelBorderStyle = "settings.panelBorderStyle"
         static let panelBorderColorHex = "settings.panelBorderColorHex"
@@ -310,6 +312,12 @@ final class SettingsStore: ObservableObject {
     }
     @Published var panelAppearRippleEnabled: Bool {
         didSet { userDefaults.set(panelAppearRippleEnabled, forKey: Keys.panelAppearRippleEnabled) }
+    }
+    /// Shows the persistent Apple-Intelligence-inspired edge light while the real pointer is
+    /// controlling a source window on PiPanel's private display. Unlike the configurable normal
+    /// border, this is interaction feedback and is therefore enabled by default and applied live.
+    @Published var controlModeGlowEnabled: Bool {
+        didSet { userDefaults.set(controlModeGlowEnabled, forKey: Keys.controlModeGlowEnabled) }
     }
     @Published var panelBackgroundColorHex: String {
         didSet { userDefaults.set(panelBackgroundColorHex, forKey: Keys.panelBackgroundColorHex) }
@@ -477,6 +485,9 @@ final class SettingsStore: ObservableObject {
         panelAppearRippleEnabled = userDefaults.object(
             forKey: Keys.panelAppearRippleEnabled
         ) as? Bool ?? DefaultValues.panelAppearRippleEnabled
+        controlModeGlowEnabled = userDefaults.object(
+            forKey: Keys.controlModeGlowEnabled
+        ) as? Bool ?? DefaultValues.controlModeGlowEnabled
         panelBackgroundColorHex = userDefaults.string(
             forKey: Keys.panelBackgroundColorHex
         ) ?? DefaultValues.panelBackgroundColorHex
@@ -572,6 +583,7 @@ final class SettingsStore: ObservableObject {
         stackCascadeMargin = DefaultValues.stackCascadeMargin
         stackMaxVisibleDepth = DefaultValues.stackMaxVisibleDepth
         panelAppearRippleEnabled = DefaultValues.panelAppearRippleEnabled
+        controlModeGlowEnabled = DefaultValues.controlModeGlowEnabled
         panelBackgroundColorHex = DefaultValues.panelBackgroundColorHex
         panelBorderStyle = DefaultValues.panelBorderStyle
         panelBorderColorHex = DefaultValues.panelBorderColorHex
@@ -585,5 +597,19 @@ final class SettingsStore: ObservableObject {
         stackShortcut = DefaultValues.stackShortcut
         closeAllShortcut = DefaultValues.closeAllShortcut
         pipAllShortcut = DefaultValues.pipAllShortcut
+    }
+
+    /// Restores only the global shortcuts. The shortcuts page exposes this focused action so a
+    /// user does not have to reset unrelated appearance, capture and automation preferences.
+    func resetShortcutsToDefaults() {
+        stackShortcut = DefaultValues.stackShortcut
+        closeAllShortcut = DefaultValues.closeAllShortcut
+        pipAllShortcut = DefaultValues.pipAllShortcut
+    }
+
+    var shortcutsAreDefault: Bool {
+        stackShortcut == DefaultValues.stackShortcut
+            && closeAllShortcut == DefaultValues.closeAllShortcut
+            && pipAllShortcut == DefaultValues.pipAllShortcut
     }
 }

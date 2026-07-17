@@ -1,5 +1,6 @@
 import AppKit
 import CoreMedia
+import CoreImage
 
 @MainActor
 protocol PiPPanelControllerDelegate: AnyObject {
@@ -11,11 +12,341 @@ protocol PiPPanelControllerDelegate: AnyObject {
     func pipPanelControllerDidRequestUnstackAll(_ controller: PiPPanelController)
 }
 
+/// Chooses letterboxing only when the source application itself has stopped following the PiP.
+/// Virtual-display capacity alone never triggers `.fit`; its projected target is considered only
+/// to catch the case where uniform capacity scaling pulls another axis across an already-confirmed
+/// app limit. A freely-resizable app therefore remains crop-free without gaining needless bars.
+enum PiPContentScalingPolicy {
+    static func shouldUseFit(
+        sourceEquivalentSize size: CGSize,
+        effectiveResizeTarget: CGSize? = nil,
+        discoveredAppMinimum floor: CGSize,
+        discoveredAppMaximum ceiling: CGSize,
+        tolerance: CGFloat = 1
+    ) -> Bool {
+        let sizes = [size, effectiveResizeTarget].compactMap { $0 }
+        return sizes.contains { candidate in
+            candidate.width < floor.width - tolerance
+                || candidate.height < floor.height - tolerance
+                || candidate.width > ceiling.width + tolerance
+                || candidate.height > ceiling.height + tolerance
+        }
+    }
+
+    /// Terminal windows such as Ghostty resize in whole character-cell increments, so the real
+    /// source commonly settles a few points away from the freely-dragged PiP aspect ratio. Cropping
+    /// that tiny mismatch with aspect-fill visibly trims the left/right terminal columns. A small
+    /// non-uniform correction is visually imperceptible and keeps every captured pixel on-screen;
+    /// larger mismatches still use aspect-fill to hide genuine asynchronous resize catch-up.
+    static func shouldStretchMinorAspectMismatch(
+        containerSize: CGSize,
+        capturedContentSize: CGSize,
+        maximumRelativeAspectDifference: CGFloat = 0.03
+    ) -> Bool {
+        guard containerSize.width > 0, containerSize.height > 0,
+              capturedContentSize.width > 0, capturedContentSize.height > 0 else { return false }
+        let containerAspect = containerSize.width / containerSize.height
+        let contentAspect = capturedContentSize.width / capturedContentSize.height
+        return abs(contentAspect / containerAspect - 1) <= maximumRelativeAspectDifference
+    }
+}
+
+enum PiPPanelAspectPolicy {
+    /// Keeps the panel width stable while matching a newly-settled capture aspect, then uniformly
+    /// fits that result inside the panel's legal size range. Used after virtual-display topology
+    /// changes, where the source app may accept a different size/aspect than was requested.
+    static func matchingSize(
+        currentSize: CGSize,
+        capturedContentSize: CGSize,
+        minimumSize: CGSize,
+        maximumSize: CGSize,
+        tolerance: CGFloat = 0.03
+    ) -> CGSize {
+        guard currentSize.width > 0, currentSize.height > 0,
+              capturedContentSize.width > 0, capturedContentSize.height > 0 else { return currentSize }
+        let contentAspect = capturedContentSize.width / capturedContentSize.height
+        let currentAspect = currentSize.width / currentSize.height
+        guard abs(contentAspect / currentAspect - 1) > tolerance else { return currentSize }
+
+        var result = CGSize(width: currentSize.width, height: currentSize.width / contentAspect)
+        let downScale = min(
+            1,
+            maximumSize.width / max(result.width, 1),
+            maximumSize.height / max(result.height, 1)
+        )
+        result.width *= downScale
+        result.height *= downScale
+
+        let upScale = max(
+            1,
+            minimumSize.width / max(result.width, 1),
+            minimumSize.height / max(result.height, 1)
+        )
+        result.width *= upScale
+        result.height *= upScale
+        return result
+    }
+}
+
 /// NSPanel defaults canBecomeKey to false for borderless windows — we need it true so the panel
 /// can receive keyDown events to forward (InteractionForwarder), even though it never activates
 /// the app (still .nonactivatingPanel).
 private final class InteractivePiPPanel: NSPanel {
     override var canBecomeKey: Bool { true }
+}
+
+/// Draws control feedback just outside the PiP boundary. A fixed, feathered rounded-rectangle mask
+/// keeps the effect off the captured picture while a pastel conic gradient moves beneath it. Only
+/// the colors rotate; the mask never does, so the effect cannot sweep through the PiP interior or
+/// expose square corners.
+private final class ControlModeOuterGlowView: NSView {
+    /// Leaves enough room for the softened edge without letting the feedback spread too far from
+    /// the PiP. This still exceeds the filter footprint so the child window cannot expose square
+    /// corners by clipping the glow.
+    static let padding: CGFloat = 16
+
+    private let backdropBlur = NSVisualEffectView()
+    private let glowContainer = CALayer()
+    private let glowClip = CALayer()
+    private let glowMask = CALayer()
+    private let pastelGradient = CAGradientLayer()
+    private let maskContext = CIContext(options: [.cacheIntermediates: false])
+    private var lastMaskSize: CGSize = .zero
+    private var lastMaskRadius: CGFloat = -1
+    private var isActive = false
+
+    override init(frame frameRect: NSRect) {
+        super.init(frame: frameRect)
+        wantsLayer = true
+        layer?.backgroundColor = NSColor.clear.cgColor
+
+        backdropBlur.material = .popover
+        backdropBlur.blendingMode = .behindWindow
+        backdropBlur.state = .active
+        backdropBlur.appearance = NSAppearance(named: .aqua)
+        backdropBlur.wantsLayer = true
+        backdropBlur.layer?.opacity = 0
+        addSubview(backdropBlur)
+
+        pastelGradient.type = .conic
+        pastelGradient.startPoint = CGPoint(x: 0.5, y: 0.5)
+        pastelGradient.endPoint = CGPoint(x: 0.5, y: 0)
+        pastelGradient.colors = [
+            NSColor(calibratedRed: 0.78, green: 0.72, blue: 1.00, alpha: 0.90).cgColor,
+            NSColor(calibratedRed: 0.67, green: 0.86, blue: 1.00, alpha: 0.88).cgColor,
+            NSColor(calibratedRed: 0.70, green: 0.96, blue: 0.87, alpha: 0.86).cgColor,
+            NSColor(calibratedRed: 1.00, green: 0.88, blue: 0.68, alpha: 0.86).cgColor,
+            NSColor(calibratedRed: 1.00, green: 0.73, blue: 0.83, alpha: 0.88).cgColor,
+            NSColor(calibratedRed: 0.78, green: 0.72, blue: 1.00, alpha: 0.90).cgColor
+        ]
+        pastelGradient.locations = [0, 0.20, 0.40, 0.60, 0.80, 1]
+
+        // The raster mask already contains the Gaussian feather. This avoids running a full-panel
+        // blur filter on every animation frame and keeps the moving feedback inexpensive.
+        glowClip.mask = glowMask
+        glowClip.addSublayer(pastelGradient)
+        glowContainer.addSublayer(glowClip)
+
+        glowContainer.opacity = 0
+        layer?.addSublayer(glowContainer)
+    }
+
+    required init?(coder: NSCoder) {
+        fatalError("init(coder:) has not been implemented")
+    }
+
+    func setActive(_ active: Bool) {
+        guard isActive != active else { return }
+        isActive = active
+        if active {
+            needsLayout = true
+            layoutSubtreeIfNeeded()
+            startPastelFlowAnimation()
+            animateOpacity(
+                of: glowContainer,
+                to: 1,
+                duration: 0.16,
+                key: "controlModeGlowOpacityTransition"
+            )
+            if let blurLayer = backdropBlur.layer {
+                animateOpacity(
+                    of: blurLayer,
+                    to: 0.70,
+                    duration: 0.18,
+                    key: "controlModeBackdropOpacityTransition"
+                )
+            }
+        } else {
+            // Keep the colors moving during the fade so the edge leaves a short, natural-looking
+            // afterglow instead of freezing and vanishing on the mouse-exit frame.
+            animateOpacity(
+                of: glowContainer,
+                to: 0,
+                duration: 0.34,
+                key: "controlModeGlowOpacityTransition"
+            )
+            if let blurLayer = backdropBlur.layer {
+                animateOpacity(
+                    of: blurLayer,
+                    to: 0,
+                    duration: 0.26,
+                    key: "controlModeBackdropOpacityTransition"
+                )
+            }
+            DispatchQueue.main.asyncAfter(deadline: .now() + 0.36) { [weak self] in
+                guard let self, !self.isActive else { return }
+                self.pastelGradient.removeAnimation(forKey: "controlModePastelFlow")
+            }
+        }
+    }
+
+    override func layout() {
+        super.layout()
+        CATransaction.begin()
+        CATransaction.setDisableActions(true)
+        backdropBlur.frame = bounds
+        glowContainer.frame = bounds
+        glowClip.frame = bounds
+        glowMask.frame = bounds
+
+        let panelRect = bounds.insetBy(dx: Self.padding, dy: Self.padding)
+        let radius = CGFloat(SettingsStore.shared.panelCornerRadius)
+
+        // Keep the rotating gradient large enough to cover the fixed rectangular mask at every
+        // angle. Rotating only this oversized color field is what prevents the rounded border itself
+        // from rotating into the PiP content.
+        let gradientSide = ceil(hypot(bounds.width, bounds.height))
+        pastelGradient.bounds = CGRect(x: 0, y: 0, width: gradientSide, height: gradientSide)
+        pastelGradient.position = CGPoint(x: bounds.midX, y: bounds.midY)
+
+        // A raster alpha mask is blurred before it reaches NSVisualEffectView. Applying a filter
+        // directly to a CALayer used as another layer's mask leaves a hard compositing boundary on
+        // some WindowServer paths; baking the Gaussian into the mask image is deterministic.
+        if lastMaskSize != bounds.size || lastMaskRadius != radius {
+            if let mask = makeFeatheredRingMask(
+                size: bounds.size,
+                panelRect: panelRect,
+                radius: radius
+            ) {
+                backdropBlur.maskImage = mask.image
+                glowMask.contents = mask.cgImage
+                glowMask.contentsScale = 2
+                glowMask.contentsGravity = .resize
+            }
+            lastMaskSize = bounds.size
+            lastMaskRadius = radius
+        }
+        CATransaction.commit()
+    }
+
+    private func makeFeatheredRingMask(
+        size: CGSize,
+        panelRect: CGRect,
+        radius: CGFloat
+    ) -> (image: NSImage, cgImage: CGImage)? {
+        guard size.width > 0, size.height > 0 else { return nil }
+        let scale: CGFloat = 2
+        let pixelWidth = Int(ceil(size.width * scale))
+        let pixelHeight = Int(ceil(size.height * scale))
+        guard let context = CGContext(
+            data: nil,
+            width: pixelWidth,
+            height: pixelHeight,
+            bitsPerComponent: 8,
+            bytesPerRow: 0,
+            space: CGColorSpaceCreateDeviceRGB(),
+            bitmapInfo: CGImageAlphaInfo.premultipliedLast.rawValue
+        ) else { return nil }
+
+        context.scaleBy(x: scale, y: scale)
+        // Put the stroke's inner edge exactly on the PiP boundary. The final clear pass below
+        // removes the inward half of the Gaussian, leaving an outside-only halo that still touches
+        // the panel instead of appearing as a detached ring.
+        let lineWidth: CGFloat = 5
+        let haloOffset = lineWidth / 2
+        let haloRect = panelRect.insetBy(dx: -haloOffset, dy: -haloOffset)
+        context.setStrokeColor(NSColor.white.cgColor)
+        context.setLineWidth(lineWidth)
+        context.addPath(CGPath(
+            roundedRect: haloRect,
+            cornerWidth: radius + haloOffset,
+            cornerHeight: radius + haloOffset,
+            transform: nil
+        ))
+        context.strokePath()
+        guard let baseImage = context.makeImage() else { return nil }
+
+        let input = CIImage(cgImage: baseImage)
+        let blurred = input
+            .clampedToExtent()
+            .applyingFilter("CIGaussianBlur", parameters: [kCIInputRadiusKey: 2.0])
+            .cropped(to: input.extent)
+        guard let blurredOutput = maskContext.createCGImage(blurred, from: input.extent),
+              let outsideOnlyContext = CGContext(
+                data: nil,
+                width: pixelWidth,
+                height: pixelHeight,
+                bitsPerComponent: 8,
+                bytesPerRow: 0,
+                space: CGColorSpaceCreateDeviceRGB(),
+                bitmapInfo: CGImageAlphaInfo.premultipliedLast.rawValue
+              ) else { return nil }
+
+        outsideOnlyContext.draw(
+            blurredOutput,
+            in: CGRect(x: 0, y: 0, width: pixelWidth, height: pixelHeight)
+        )
+        outsideOnlyContext.scaleBy(x: scale, y: scale)
+        outsideOnlyContext.setBlendMode(.clear)
+        // Clear precisely through the panel boundary: no captured pixel is tinted, while the first
+        // outside pixel remains part of the halo so there is no visible gap.
+        outsideOnlyContext.addPath(CGPath(
+            roundedRect: panelRect,
+            cornerWidth: radius,
+            cornerHeight: radius,
+            transform: nil
+        ))
+        outsideOnlyContext.fillPath()
+
+        guard let output = outsideOnlyContext.makeImage() else { return nil }
+        return (NSImage(cgImage: output, size: size), output)
+    }
+
+    private func startPastelFlowAnimation() {
+        // Preserve the current color position when the pointer briefly exits and comes back during
+        // the afterglow; restarting the animation here would create a visible color jump.
+        guard pastelGradient.animation(forKey: "controlModePastelFlow") == nil else { return }
+        let flow = CABasicAnimation(keyPath: "transform.rotation.z")
+        flow.fromValue = 0
+        flow.toValue = CGFloat.pi * 2
+        flow.duration = 5.4
+        flow.repeatCount = .infinity
+        flow.timingFunction = CAMediaTimingFunction(name: .linear)
+        pastelGradient.add(flow, forKey: "controlModePastelFlow")
+    }
+
+    private func animateOpacity(
+        of targetLayer: CALayer,
+        to targetOpacity: Float,
+        duration: CFTimeInterval,
+        key: String
+    ) {
+        let currentOpacity = targetLayer.presentation()?.opacity ?? targetLayer.opacity
+        targetLayer.removeAnimation(forKey: key)
+
+        CATransaction.begin()
+        CATransaction.setDisableActions(true)
+        targetLayer.opacity = targetOpacity
+        CATransaction.commit()
+
+        let transition = CABasicAnimation(keyPath: "opacity")
+        transition.fromValue = currentOpacity
+        transition.toValue = targetOpacity
+        transition.duration = duration
+        transition.timingFunction = CAMediaTimingFunction(name: .easeOut)
+        targetLayer.add(transition, forKey: key)
+    }
+
 }
 
 /// A floating, non-activating panel that stays visible above other apps' full-screen Spaces.
@@ -71,6 +402,8 @@ final class PiPPanelController: NSObject {
     /// un-hides a panel that's currently supposed to be hidden — it just takes effect the next
     /// time this panel actually becomes visible again.
     private var isCurrentlyHidden = false
+    private var isControlModeGlowRequested = false
+    private var controlModeGlowPanel: NSPanel?
     /// The source window's own bundle identifier, used to filter NowPlayingMonitor updates down
     /// to just the ones that actually belong to this session's own app — MediaRemote reports one
     /// system-wide "now playing" app at a time, so without this check a session showing lyrics
@@ -155,6 +488,9 @@ final class PiPPanelController: NSObject {
         videoView.isMusicApp = isMusicApp
         videoView.isVideoApp = isVideoApp
         panel.contentView = videoView
+        videoView.onControlModeAppearanceChanged = { [weak self] shouldShow in
+            self?.setControlModeGlowRequested(shouldShow)
+        }
 
         if isMusicApp || isVideoApp {
             playbackControlsObserverId = NowPlayingMonitor.shared.addObserver { [weak self] info in
@@ -210,11 +546,15 @@ final class PiPPanelController: NSObject {
     /// on top of the drag gesture that triggered it. Both the panel and the close target now leave
     /// immediately, in that order, as soon as the drop is confirmed.
     func close() {
+        // Cursor capture uses the real system pointer on a private display. Always return it before
+        // hiding the panel or destroying that display, including failed startup and app shutdown.
+        interactionForwarder?.stop()
         setLyricsMode(false)
         if let playbackControlsObserverId {
             NowPlayingMonitor.shared.removeObserver(playbackControlsObserverId)
         }
         playbackControlsObserverId = nil
+        setControlModeGlowRequested(false)
         panel.orderOut(nil)
     }
 
@@ -227,6 +567,7 @@ final class PiPPanelController: NSObject {
         isCurrentlyHidden = !live
         panel.ignoresMouseEvents = !live
         if live { panel.orderFrontRegardless() }
+        refreshControlModeGlowVisibility()
         let targetAlpha = live ? CGFloat(SettingsStore.shared.panelOpacity) : 0
         let applyAlpha = { self.panel.animator().alphaValue = targetAlpha }
         guard animated else {
@@ -241,6 +582,14 @@ final class PiPPanelController: NSObject {
 
     func enqueue(_ sampleBuffer: CMSampleBuffer, nativeSize: CGSize) {
         videoView.enqueue(sampleBuffer, nativeSize: nativeSize)
+    }
+
+    func sourceWindowWillMoveOntoVirtualDisplay() {
+        videoView.sourceWindowWillMoveOntoVirtualDisplay()
+    }
+
+    func sourceWindowDidMoveOntoVirtualDisplay() {
+        videoView.sourceWindowDidMoveOntoVirtualDisplay()
     }
 
     private func reportPresentationDisplayMaximumFPSIfNeeded(force: Bool = false) {
@@ -269,6 +618,7 @@ final class PiPPanelController: NSObject {
     func setFullyHidden(_ hidden: Bool) {
         isCurrentlyHidden = hidden
         panel.ignoresMouseEvents = hidden
+        refreshControlModeGlowVisibility()
         if hidden {
             NSAnimationContext.runAnimationGroup { context in
                 context.duration = 0.15
@@ -293,6 +643,71 @@ final class PiPPanelController: NSObject {
     func updateOpacity() {
         guard !isCurrentlyHidden else { return }
         panel.animator().alphaValue = CGFloat(SettingsStore.shared.panelOpacity)
+    }
+
+    /// Applies the control-feedback preference to an already-open panel. PiPVideoLayerView keeps
+    /// track of whether this particular session is currently controlling its source.
+    func updateControlModeGlowPreference() {
+        videoView.refreshControlModeGlowPreference()
+    }
+
+    private func setControlModeGlowRequested(_ requested: Bool) {
+        isControlModeGlowRequested = requested
+        refreshControlModeGlowVisibility()
+    }
+
+    private func refreshControlModeGlowVisibility() {
+        let shouldShow = isControlModeGlowRequested && !isCurrentlyHidden
+        guard shouldShow else {
+            (controlModeGlowPanel?.contentView as? ControlModeOuterGlowView)?.setActive(false)
+            if let controlModeGlowPanel {
+                if controlModeGlowPanel.parent === panel {
+                    panel.removeChildWindow(controlModeGlowPanel)
+                }
+                controlModeGlowPanel.orderOut(nil)
+            }
+            return
+        }
+
+        let glowPanel = ensureControlModeGlowPanel()
+        syncControlModeGlowFrame()
+        if glowPanel.parent == nil {
+            panel.addChildWindow(glowPanel, ordered: .above)
+        }
+        glowPanel.orderFrontRegardless()
+        (glowPanel.contentView as? ControlModeOuterGlowView)?.setActive(true)
+    }
+
+    private func ensureControlModeGlowPanel() -> NSPanel {
+        if let controlModeGlowPanel { return controlModeGlowPanel }
+
+        let padding = ControlModeOuterGlowView.padding
+        let glowFrame = panel.frame.insetBy(dx: -padding, dy: -padding)
+        let glowPanel = NSPanel(
+            contentRect: glowFrame,
+            styleMask: [.borderless, .nonactivatingPanel],
+            backing: .buffered,
+            defer: false
+        )
+        glowPanel.isOpaque = false
+        glowPanel.backgroundColor = .clear
+        glowPanel.hasShadow = false
+        glowPanel.ignoresMouseEvents = true
+        glowPanel.hidesOnDeactivate = false
+        glowPanel.level = panel.level
+        glowPanel.collectionBehavior = panel.collectionBehavior
+        glowPanel.contentView = ControlModeOuterGlowView(frame: NSRect(origin: .zero, size: glowFrame.size))
+        controlModeGlowPanel = glowPanel
+        return glowPanel
+    }
+
+    private func syncControlModeGlowFrame() {
+        guard let controlModeGlowPanel else { return }
+        let padding = ControlModeOuterGlowView.padding
+        controlModeGlowPanel.setFrame(
+            panel.frame.insetBy(dx: -padding, dy: -padding),
+            display: true
+        )
     }
 
     /// Swaps this panel between the mirrored video and the PiP-lyrics panel (PiPVideoLayerView.
@@ -357,23 +772,18 @@ final class PiPPanelController: NSObject {
         // comparing. Falls back to 1:1 if no resize has happened yet to establish the scale.
         let scale = interactionForwarder?.captureSession?.panelToSourceScale ?? 1
         let size = CGSize(width: panel.frame.width * scale, height: panel.frame.height * scale)
+        let effectiveTarget = interactionForwarder?.captureSession?
+            .projectedSourceResizeTarget(forPanelSize: panel.frame.size)
         let floor = discoveredSourceMinSize ?? .zero
-        // The ceiling isn't just whatever the source app itself refuses to grow past
-        // (discoveredSourceMaxSize) — the virtual display backing the whole session has its own
-        // hard capacity too (CaptureSession.deliverableMaxSize), and CaptureSession.
-        // clampToDeliverableSize already silently pins the *real* source window there once a
-        // resize request would exceed it, same as an app-level ceiling would. Folding it into the
-        // same comparison here means the panel is free to keep growing well past that point
-        // (nothing artificially caps panel.maxSize to match anymore — see didResizeTo) while the
-        // mirror correctly drops into letterboxed .fit instead of continuing to crop-fill with a
-        // source that's actually stopped growing, the same way it already does for an app's own
-        // discovered ceiling.
-        let deliverableCeiling = interactionForwarder?.captureSession?.deliverableMaxSize ?? CGSize(width: CGFloat.infinity, height: CGFloat.infinity)
-        let appCeiling = discoveredSourceMaxSize ?? CGSize(width: CGFloat.infinity, height: CGFloat.infinity)
-        let ceiling = CGSize(width: min(appCeiling.width, deliverableCeiling.width), height: min(appCeiling.height, deliverableCeiling.height))
-        let isBelowFloor = size.width < floor.width || size.height < floor.height
-        let isAboveCeiling = size.width > ceiling.width || size.height > ceiling.height
-        videoView.setContentScalingMode((isBelowFloor || isAboveCeiling) ? .fit : .fill)
+        let appCeiling = discoveredSourceMaxSize
+            ?? CGSize(width: CGFloat.infinity, height: CGFloat.infinity)
+        let shouldUseFit = PiPContentScalingPolicy.shouldUseFit(
+            sourceEquivalentSize: size,
+            effectiveResizeTarget: effectiveTarget,
+            discoveredAppMinimum: floor,
+            discoveredAppMaximum: appCeiling
+        )
+        videoView.setContentScalingMode(shouldUseFit ? .fit : .fill)
     }
 
     /// Called when CaptureSession.onDeliverableSizeChanged fires — a live virtualDisplayLongEdge
@@ -393,12 +803,14 @@ final class PiPPanelController: NSObject {
         // preserving the panel's aspect ratio and top-left anchor so a live settings change feels
         // stable instead of making the window jump across the screen.
         let currentFrame = panel.frame
-        if currentFrame.width > deliverableMax.width || currentFrame.height > deliverableMax.height {
-            let scale = min(
-                deliverableMax.width / max(currentFrame.width, 1),
-                deliverableMax.height / max(currentFrame.height, 1)
-            )
-            let newSize = CGSize(width: currentFrame.width * scale, height: currentFrame.height * scale)
+        let newSize = PiPPanelAspectPolicy.matchingSize(
+            currentSize: currentFrame.size,
+            capturedContentSize: captureSession.currentCapturedContentSize(),
+            minimumSize: panel.minSize,
+            maximumSize: deliverableMax
+        )
+        if abs(newSize.width - currentFrame.width) > 0.5
+            || abs(newSize.height - currentFrame.height) > 0.5 {
             let resizedFrame = CGRect(
                 x: currentFrame.minX,
                 y: currentFrame.maxY - newSize.height,
@@ -420,6 +832,14 @@ final class PiPPanelController: NSObject {
 extension PiPPanelController: NSWindowDelegate {
     func windowDidChangeScreen(_ notification: Notification) {
         reportPresentationDisplayMaximumFPSIfNeeded()
+    }
+
+    func windowDidMove(_ notification: Notification) {
+        syncControlModeGlowFrame()
+    }
+
+    func windowDidResize(_ notification: Notification) {
+        syncControlModeGlowFrame()
     }
 }
 
@@ -461,8 +881,11 @@ extension PiPPanelController: PiPVideoLayerViewDelegate {
                 height: min(panel.maxSize.height, deliverableMax.height)
             )
         }
-        updateContentScalingMode()
+        // Establishes panelToSourceScale synchronously on the first resize. Updating the visual
+        // mode afterward lets it compare against the same projected source target that the async
+        // resize pipeline will actually use, including virtual-display clamping.
         interactionForwarder?.captureSession?.resizeSourceWindow(to: size)
+        updateContentScalingMode()
     }
 
     func videoViewDidRequestCloseByDragging(_ view: PiPVideoLayerView) {

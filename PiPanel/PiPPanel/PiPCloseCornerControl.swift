@@ -3,7 +3,33 @@ import AppKit
 /// Lets the close action land on the first click even when the non-activating PiP panel is not
 /// currently key.
 private final class FirstMouseButton: NSButton {
+    var onHoverChanged: ((Bool) -> Void)?
+    private var hoverTrackingArea: NSTrackingArea?
+
     override func acceptsFirstMouse(for event: NSEvent?) -> Bool { true }
+
+    override func updateTrackingAreas() {
+        super.updateTrackingAreas()
+        if let hoverTrackingArea {
+            removeTrackingArea(hoverTrackingArea)
+        }
+        let area = NSTrackingArea(
+            rect: bounds,
+            options: [.mouseEnteredAndExited, .activeAlways, .inVisibleRect],
+            owner: self,
+            userInfo: nil
+        )
+        addTrackingArea(area)
+        hoverTrackingArea = area
+    }
+
+    override func mouseEntered(with event: NSEvent) {
+        onHoverChanged?(true)
+    }
+
+    override func mouseExited(with event: NSEvent) {
+        onHoverChanged?(false)
+    }
 }
 
 @MainActor
@@ -16,6 +42,7 @@ protocol PiPCloseCornerControlDelegate: AnyObject {
 /// mouse events through to the picture underneath.
 final class PiPCloseCornerControl: NSView {
     weak var delegate: PiPCloseCornerControlDelegate?
+    private var isCloseButtonHovered = false
 
     private let closeButton: FirstMouseButton = {
         let button = FirstMouseButton(
@@ -42,6 +69,9 @@ final class PiPCloseCornerControl: NSView {
         super.init(frame: frameRect)
         closeButton.target = self
         closeButton.action = #selector(closeButtonPressed)
+        closeButton.onHoverChanged = { [weak self] hovered in
+            self?.setCloseButtonHovered(hovered)
+        }
         addSubview(closeButton)
     }
 
@@ -78,5 +108,81 @@ final class PiPCloseCornerControl: NSView {
 
     @objc private func closeButtonPressed() {
         delegate?.closeCornerControlWasClicked(self)
+    }
+
+    private func setCloseButtonHovered(_ hovered: Bool) {
+        guard hovered != isCloseButtonHovered, let buttonLayer = closeButton.layer else { return }
+        isCloseButtonHovered = hovered
+
+        let targetBackground = hovered
+            ? NSColor.systemRed.withAlphaComponent(0.88).cgColor
+            : NSColor.black.withAlphaComponent(0.58).cgColor
+        let targetBorder = hovered
+            ? NSColor.white.withAlphaComponent(0.48).cgColor
+            : NSColor.white.withAlphaComponent(0.22).cgColor
+        let targetShadowOpacity: Float = hovered ? 0.45 : 0.28
+        let targetShadowRadius: CGFloat = hovered ? 5 : 3
+        let targetScale: CGFloat = hovered ? 1.07 : 1
+
+        let presentation = buttonLayer.presentation()
+        let currentBackground = presentation?.backgroundColor ?? buttonLayer.backgroundColor
+        let currentBorder = presentation?.borderColor ?? buttonLayer.borderColor
+        let currentShadowOpacity = presentation?.shadowOpacity ?? buttonLayer.shadowOpacity
+        let currentShadowRadius = presentation?.shadowRadius ?? buttonLayer.shadowRadius
+        let currentScale = presentation?.transform.m11 ?? buttonLayer.transform.m11
+
+        CATransaction.begin()
+        CATransaction.setDisableActions(true)
+        buttonLayer.backgroundColor = targetBackground
+        buttonLayer.borderColor = targetBorder
+        buttonLayer.shadowOpacity = targetShadowOpacity
+        buttonLayer.shadowRadius = targetShadowRadius
+        buttonLayer.transform = CATransform3DMakeScale(targetScale, targetScale, 1)
+        CATransaction.commit()
+
+        addHoverAnimation(
+            to: buttonLayer,
+            keyPath: "backgroundColor",
+            from: currentBackground,
+            to: targetBackground
+        )
+        addHoverAnimation(
+            to: buttonLayer,
+            keyPath: "borderColor",
+            from: currentBorder,
+            to: targetBorder
+        )
+        addHoverAnimation(
+            to: buttonLayer,
+            keyPath: "shadowOpacity",
+            from: currentShadowOpacity,
+            to: targetShadowOpacity
+        )
+        addHoverAnimation(
+            to: buttonLayer,
+            keyPath: "shadowRadius",
+            from: currentShadowRadius,
+            to: targetShadowRadius
+        )
+        addHoverAnimation(
+            to: buttonLayer,
+            keyPath: "transform.scale",
+            from: currentScale,
+            to: targetScale
+        )
+    }
+
+    private func addHoverAnimation(
+        to targetLayer: CALayer,
+        keyPath: String,
+        from startValue: Any?,
+        to endValue: Any
+    ) {
+        let animation = CABasicAnimation(keyPath: keyPath)
+        animation.fromValue = startValue
+        animation.toValue = endValue
+        animation.duration = 0.16
+        animation.timingFunction = CAMediaTimingFunction(name: .easeOut)
+        targetLayer.add(animation, forKey: "closeButtonHover.\(keyPath)")
     }
 }

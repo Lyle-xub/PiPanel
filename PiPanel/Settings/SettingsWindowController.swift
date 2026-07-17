@@ -18,7 +18,7 @@ final class SettingsWindowController: NSWindowController, NSWindowDelegate {
 
     private convenience init() {
         let window = NSWindow(
-            contentRect: NSRect(x: 0, y: 0, width: 680, height: 520),
+            contentRect: NSRect(x: 0, y: 0, width: 680, height: 580),
             // .fullSizeContentView lets SettingsRootView's NavigationSplitView draw all the way up
             // under the traffic lights instead of stopping below a reserved titlebar strip —
             // combined with titlebarAppearsTransparent/titleVisibility below, this is the same
@@ -34,7 +34,7 @@ final class SettingsWindowController: NSWindowController, NSWindowDelegate {
         window.title = "PiPanel 设置"
         window.titlebarAppearsTransparent = true
         window.titleVisibility = .hidden
-        window.minSize = NSSize(width: 600, height: 440)
+        window.minSize = NSSize(width: 680, height: 580)
         window.backgroundColor = .windowBackgroundColor
         window.isReleasedWhenClosed = false
         window.center()

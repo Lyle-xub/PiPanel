@@ -175,6 +175,7 @@ final class PiPSessionManager: NSObject, ObservableObject {
 
     override init() {
         super.init()
+        VirtualDisplayCursorGuard.shared.start()
         edgeHandleWindow.delegate = self
         NSWorkspace.shared.notificationCenter.addObserver(
             self,
@@ -392,6 +393,14 @@ final class PiPSessionManager: NSObject, ObservableObject {
                 }
             }
             .store(in: &settingsCancellables)
+        SettingsStore.shared.$controlModeGlowEnabled
+            .dropFirst()
+            .sink { [weak self] _ in
+                for session in self?.sessions ?? [] {
+                    session.panelController.updateControlModeGlowPreference()
+                }
+            }
+            .store(in: &settingsCancellables)
         // Not dropFirst(): idleMonitor needs to be started on launch too if the setting was
         // already on from a previous run, not just the moment the user flips the toggle live.
         SettingsStore.shared.$autoStackOnIdleEnabled
@@ -574,6 +583,12 @@ final class PiPSessionManager: NSObject, ObservableObject {
         captureSession.presentationDisplayMaximumFPS = DisplayRefreshRate.fps(for: sourceScreen)
         captureSession.virtualDisplayLongEdge = SettingsStore.shared.virtualDisplayLongEdge
         captureSession.maxOutputLongEdge = CGFloat(SettingsStore.shared.captureOutputLongEdge)
+        captureSession.onSourceWindowWillMoveOntoVirtualDisplay = { [weak panelController] in
+            panelController?.sourceWindowWillMoveOntoVirtualDisplay()
+        }
+        captureSession.onSourceWindowDidMoveOntoVirtualDisplay = { [weak panelController] in
+            panelController?.sourceWindowDidMoveOntoVirtualDisplay()
+        }
         panelController.onPresentationDisplayMaximumFPSChanged = { [weak captureSession] fps in
             captureSession?.presentationDisplayMaximumFPS = fps
         }
@@ -648,6 +663,9 @@ final class PiPSessionManager: NSObject, ObservableObject {
     func stopAllAndWaitForWindowRestoration() async {
         isPreparingForTermination = true
         startingSourcePIDs.removeAll()
+        // Also covers the no-active-session case where the pointer crossed onto an idle pre-warmed
+        // display. Session close performs the same rescue for an intentional control capture.
+        _ = VirtualDisplayCursorGuard.shared.returnCursorToPhysical()
         let tasks = sessions.compactMap { stopTask(for: $0) }
         for task in tasks {
             await task.value

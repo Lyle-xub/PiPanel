@@ -32,7 +32,7 @@ final class ShortcutRecorderNSView: NSView {
     }
 
     override var acceptsFirstResponder: Bool { true }
-    override var intrinsicContentSize: NSSize { NSSize(width: 180, height: 34) }
+    override var intrinsicContentSize: NSSize { NSSize(width: 108, height: 34) }
 
     override func mouseDown(with event: NSEvent) {
         window?.makeFirstResponder(self)

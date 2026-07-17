@@ -1,6 +1,33 @@
 import AppKit
 import AVFoundation
+import CoreImage
 import CoreMedia
+
+/// A material-independent transition glass. CALayer's background filter blurs the already-rendered
+/// PiP behind this transparent view, so there is no snapshot/copy and no system material tint that
+/// can turn colorful content gray or muddy. Returning nil keeps every gesture on the host view.
+private final class ResizeGlassOverlayView: NSView {
+    override init(frame frameRect: NSRect) {
+        super.init(frame: frameRect)
+        wantsLayer = true
+        layer?.masksToBounds = true
+        layer?.cornerCurve = .continuous
+        layer?.backgroundColor = NSColor.white.withAlphaComponent(0.025).cgColor
+        layer?.allowsGroupOpacity = true
+
+        if let blur = CIFilter(name: "CIGaussianBlur") {
+            blur.setDefaults()
+            blur.setValue(14.0, forKey: kCIInputRadiusKey)
+            layer?.backgroundFilters = [blur]
+        }
+    }
+
+    required init?(coder: NSCoder) {
+        fatalError("init(coder:) has not been implemented")
+    }
+
+    override func hitTest(_ point: NSPoint) -> NSView? { nil }
+}
 
 /// A depth-one handoff between ScreenCaptureKit's sample queue and AppKit's main thread.
 ///
@@ -135,11 +162,28 @@ final class PiPVideoLayerView: NSView {
     /// visual zoom of the whole picture, which should show all of it rather than cropping into it.
     enum ContentScalingMode { case fill, fit }
     private var contentScalingMode: ContentScalingMode = .fill
+    /// `.resize` is used only for a very small aspect mismatch caused by apps which quantize their
+    /// window dimensions (for example Ghostty's character grid). Keep this separately from the
+    /// requested fill/fit policy so interaction geometry mirrors the layer's effective rendering.
+    private var stretchesMinorAspectMismatch = false
 
     func setContentScalingMode(_ mode: ContentScalingMode) {
-        guard contentScalingMode != mode else { return }
         contentScalingMode = mode
-        displayLayer.videoGravity = mode == .fill ? .resizeAspectFill : .resizeAspect
+        refreshVideoGravity()
+    }
+
+    private func refreshVideoGravity() {
+        let shouldStretch = contentScalingMode == .fill
+            && PiPContentScalingPolicy.shouldStretchMinorAspectMismatch(
+                containerSize: bounds.size,
+                capturedContentSize: nativeSize
+            )
+        stretchesMinorAspectMismatch = shouldStretch
+        if contentScalingMode == .fit {
+            displayLayer.videoGravity = .resizeAspect
+        } else {
+            displayLayer.videoGravity = shouldStretch ? .resize : .resizeAspectFill
+        }
     }
 
     private enum DragMode {
@@ -156,6 +200,11 @@ final class PiPVideoLayerView: NSView {
     }
 
     private static let edgeGrabInset: CGFloat = 10
+    /// AppKit exposes only horizontal and vertical resize cursors. Rotate the native horizontal
+    /// cursor instead of drawing a new symbol so diagonal corners retain the system cursor's
+    /// outline, contrast and accessibility-friendly shape.
+    private static let diagonalResizeNWSECursor = makeDiagonalResizeCursor(rotation: -45)
+    private static let diagonalResizeNESWCursor = makeDiagonalResizeCursor(rotation: 45)
     private var dragMode: DragMode?
     private var trackingArea: NSTrackingArea?
 
@@ -297,6 +346,22 @@ final class PiPVideoLayerView: NSView {
     private static let videoControlsBarSize = CGSize(width: 50, height: 34)
     private var isMusicControlsBarVisible = false
 
+    /// Covers source-window migration and live resize reflow. These are tracked as independent
+    /// reasons so a post-migration frame arriving mid-resize cannot hide the glass too early.
+    private let transitionGlassView: ResizeGlassOverlayView = {
+        let glass = ResizeGlassOverlayView(frame: .zero)
+        glass.alphaValue = 0
+        glass.isHidden = true
+        return glass
+    }()
+    private enum WindowMigrationGlassState {
+        case inactive
+        case moving
+        case awaitingPostMoveFrame
+    }
+    private var windowMigrationGlassState: WindowMigrationGlassState = .inactive
+    private var isResizeGlassVisible = false
+
     /// The alternative to CloseDropZoneOverlay's drag-to-close gesture — see SettingsStore.
     /// panelCloseMethod's own doc comment. Always a subview (cheap to keep around hidden), shown/
     /// hidden live from layout() by reading the setting fresh each time, same "live, not cached"
@@ -318,6 +383,10 @@ final class PiPVideoLayerView: NSView {
         displayLayer.frame = bounds
         displayLayer.autoresizingMask = [.layerWidthSizable, .layerHeightSizable]
         layer?.addSublayer(displayLayer)
+
+        // Install glass immediately above the video but below the loading indicator and controls.
+        // It starts hidden and is activated only by a real source move or an interactive resize.
+        addSubview(transitionGlassView)
 
         capturedCursorIndicator.frame = CGRect(origin: .zero, size: capturedCursorIndicator.image?.size ?? .zero)
         addSubview(capturedCursorIndicator)
@@ -476,6 +545,23 @@ final class PiPVideoLayerView: NSView {
     private var borderLayer: CALayer?
     private var borderView: NSView?
 
+    /// PiPPanelController renders the actual glow in a separate, non-interactive transparent
+    /// window, because pixels outside this view are clipped by the PiP panel's window bounds.
+    /// This view remains the source of truth for control state and reports live setting changes.
+    private(set) var isControlModeActive = false
+    var onControlModeAppearanceChanged: ((Bool) -> Void)?
+
+    func setControlModeActive(_ active: Bool) {
+        isControlModeActive = active
+        refreshControlModeGlowPreference()
+    }
+
+    func refreshControlModeGlowPreference() {
+        onControlModeAppearanceChanged?(
+            isControlModeActive && SettingsStore.shared.controlModeGlowEnabled
+        )
+    }
+
     /// A shape that fills a ring width points wide just inside this view's own rounded-rect
     /// bounds, hollow in the middle (even-odd fill between an outer and an inset-by-width inner
     /// rounded rect) — used as a `.mask` so whatever it's applied to (a blur view, a gradient
@@ -513,6 +599,7 @@ final class PiPVideoLayerView: NSView {
         CATransaction.begin()
         CATransaction.setDisableActions(true)
         displayLayer.frame = bounds
+        refreshVideoGravity()
         if let borderLayer {
             borderLayer.frame = bounds
             borderLayer.mask = ringMask(insetBy: CGFloat(SettingsStore.shared.panelBorderWidth))
@@ -525,6 +612,8 @@ final class PiPVideoLayerView: NSView {
         updateTitleLabel()
 
         lyricsView.frame = bounds
+        transitionGlassView.frame = bounds
+        transitionGlassView.layer?.cornerRadius = CGFloat(SettingsStore.shared.panelCornerRadius)
 
         let buttonSize: CGFloat = 24
         let buttonMargin: CGFloat = 8
@@ -640,19 +729,53 @@ final class PiPVideoLayerView: NSView {
         musicControlsBar.setVisible(visible, animated: true)
     }
 
-    /// AppKit only exposes horizontal/vertical resize cursors publicly (no diagonal one for
-    /// corners) — a corner just prioritizes whichever axis has more room to matter, defaulting to
-    /// horizontal, which is fine since either is a clear enough "you can resize here" signal.
     private func setResizeCursor(for edge: ResizeEdge) {
-        if edge.contains(.left) || edge.contains(.right) {
+        let isHorizontal = edge.contains(.left) || edge.contains(.right)
+        let isVertical = edge.contains(.top) || edge.contains(.bottom)
+
+        if isHorizontal && isVertical {
+            let isNWSE = (edge.contains(.left) && edge.contains(.top))
+                || (edge.contains(.right) && edge.contains(.bottom))
+            (isNWSE ? Self.diagonalResizeNWSECursor : Self.diagonalResizeNESWCursor).set()
+        } else if isHorizontal {
             NSCursor.resizeLeftRight.set()
-        } else if edge.contains(.top) || edge.contains(.bottom) {
+        } else if isVertical {
             NSCursor.resizeUpDown.set()
         }
     }
 
+    private static func makeDiagonalResizeCursor(rotation: CGFloat) -> NSCursor {
+        let source = NSCursor.resizeLeftRight.image
+        let side = ceil(hypot(source.size.width, source.size.height))
+        let canvasSize = CGSize(width: side, height: side)
+        let image = NSImage(size: canvasSize, flipped: false) { rect in
+            guard let context = NSGraphicsContext.current else { return false }
+            context.saveGraphicsState()
+            context.imageInterpolation = .high
+
+            let transform = NSAffineTransform()
+            transform.translateX(by: rect.midX, yBy: rect.midY)
+            transform.rotate(byDegrees: rotation)
+            transform.translateX(by: -source.size.width / 2, yBy: -source.size.height / 2)
+            transform.concat()
+            source.draw(
+                in: CGRect(origin: .zero, size: source.size),
+                from: CGRect(origin: .zero, size: source.size),
+                operation: .sourceOver,
+                fraction: 1
+            )
+            context.restoreGraphicsState()
+            return true
+        }
+        return NSCursor(
+            image: image,
+            hotSpot: CGPoint(x: canvasSize.width / 2, y: canvasSize.height / 2)
+        )
+    }
+
     func enqueue(_ sampleBuffer: CMSampleBuffer, nativeSize: CGSize) {
         self.nativeSize = nativeSize
+        refreshVideoGravity()
         if displayLayer.status == .failed {
             displayLayer.flush()
         }
@@ -665,9 +788,29 @@ final class PiPVideoLayerView: NSView {
             newValue: CMClockGetTime(CMClockGetHostTimeClock())
         )
         displayLayer.enqueue(sampleBuffer)
+        finishWindowMigrationGlassAfterPresentedFrameIfNeeded()
         if !hasShownFirstFrame {
             hasShownFirstFrame = true
             hideLoadingIndicator()
+        }
+    }
+
+    func sourceWindowWillMoveOntoVirtualDisplay() {
+        windowMigrationGlassState = .moving
+        refreshTransitionGlassVisibility(animated: true)
+    }
+
+    func sourceWindowDidMoveOntoVirtualDisplay() {
+        guard windowMigrationGlassState != .inactive else { return }
+        windowMigrationGlassState = .awaitingPostMoveFrame
+    }
+
+    private func finishWindowMigrationGlassAfterPresentedFrameIfNeeded() {
+        guard windowMigrationGlassState == .awaitingPostMoveFrame else { return }
+        windowMigrationGlassState = .inactive
+        // Let the newly-enqueued buffer reach AVSampleBufferDisplayLayer before revealing it.
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.08) { [weak self] in
+            self?.refreshTransitionGlassVisibility(animated: true)
         }
     }
 
@@ -735,6 +878,9 @@ final class PiPVideoLayerView: NSView {
     /// clicks that land in the letterbox bars rather than on the mirrored content itself.
     func displayedVideoRect(nativeSize: CGSize) -> CGRect {
         guard nativeSize.width > 0, nativeSize.height > 0, bounds.width > 0, bounds.height > 0 else {
+            return bounds
+        }
+        if stretchesMinorAspectMismatch {
             return bounds
         }
         let viewAspect = bounds.width / bounds.height
@@ -817,6 +963,7 @@ final class PiPVideoLayerView: NSView {
         let edge = resizeEdge(at: point)
         if !edge.isEmpty, let window {
             dragMode = .resizing(edge: edge, mouseDownScreenPoint: NSEvent.mouseLocation, initialFrame: window.frame)
+            setResizeGlassVisible(true, animated: true)
             return
         }
 
@@ -909,7 +1056,16 @@ final class PiPVideoLayerView: NSView {
     }
 
     override func mouseUp(with event: NSEvent) {
+        let wasResizing: Bool
+        if case .resizing = dragMode {
+            wasResizing = true
+        } else {
+            wasResizing = false
+        }
         defer {
+            if wasResizing {
+                setResizeGlassVisible(false, animated: true)
+            }
             dragMode = nil
             closeDropZoneScreen = nil
         }
@@ -932,6 +1088,42 @@ final class PiPVideoLayerView: NSView {
                 interactionDelegate?.videoViewDidRequestCloseByDragging(self)
             }
         }
+    }
+
+    private func setResizeGlassVisible(_ visible: Bool, animated: Bool) {
+        guard visible != isResizeGlassVisible else { return }
+        isResizeGlassVisible = visible
+
+        refreshTransitionGlassVisibility(animated: animated)
+    }
+
+    private func refreshTransitionGlassVisibility(animated: Bool) {
+        let visible = windowMigrationGlassState != .inactive || isResizeGlassVisible
+
+        if visible {
+            transitionGlassView.isHidden = false
+        }
+
+        let changes = {
+            self.transitionGlassView.animator().alphaValue = visible ? 1 : 0
+        }
+        guard animated else {
+            transitionGlassView.alphaValue = visible ? 1 : 0
+            if !visible {
+                transitionGlassView.isHidden = true
+            }
+            return
+        }
+
+        NSAnimationContext.runAnimationGroup({ context in
+            context.duration = visible ? 0.12 : 0.32
+            context.timingFunction = CAMediaTimingFunction(name: visible ? .easeOut : .easeInEaseOut)
+            changes()
+        }, completionHandler: { [weak self] in
+            guard let self, self.windowMigrationGlassState == .inactive,
+                  !self.isResizeGlassVisible else { return }
+            self.transitionGlassView.isHidden = true
+        })
     }
 
     private func resizeEdge(at point: CGPoint) -> ResizeEdge {

@@ -492,6 +492,14 @@ final class VirtualDisplayHost {
         case below
     }
 
+    /// WindowServer expects an extended display to remain connected to the rest of the desktop.
+    /// Sharing a whole edge, however, lets an ordinary pointer movement escape onto PiPanel's
+    /// invisible display. Keep only a one-point corner seam. Programmatic AX window placement and
+    /// InteractionForwarder's explicit cursor warp still work, while naturally hitting this exact
+    /// point with the mouse becomes practically impossible. VirtualDisplayCursorGuard remains the
+    /// runtime safety net for that final point and for topology reflows performed by macOS.
+    static let cursorIsolationSeam: CGFloat = 1
+
     /// Chooses the dominant arrangement axis from physical display centers, then continues toward
     /// the side already occupied away from the main display. Quartz Y grows downward, hence
     /// `.above` uses the minimum Y edge and `.below` the maximum Y edge.
@@ -541,27 +549,60 @@ final class VirtualDisplayHost {
             ?? .zero
         let managedAnchor = managedFrames.min { $0.key < $1.key }?.value
         let occupied = managedFrames.isEmpty ? Array(physicalFrames.values) : Array(managedFrames.values)
+        let edge = preferredPlacementEdge(physicalFrames: physicalFrames, mainDisplayID: mainDisplayID)
 
-        switch preferredPlacementEdge(physicalFrames: physicalFrames, mainDisplayID: mainDisplayID) {
+        // Once one private display has been isolated at a physical corner, later private displays
+        // may continue away from it using their full shared edge. The pointer cannot reach that
+        // private chain without first crossing the guarded one-point physical seam.
+        if let managedAnchor {
+            switch edge {
+            case .right:
+                return CGPoint(
+                    x: occupied.map(\.maxX).max() ?? managedAnchor.maxX,
+                    y: managedAnchor.minY
+                )
+            case .left:
+                return CGPoint(
+                    x: (occupied.map(\.minX).min() ?? managedAnchor.minX) - newDisplaySize.width,
+                    y: managedAnchor.minY
+                )
+            case .above:
+                return CGPoint(
+                    x: managedAnchor.minX,
+                    y: (occupied.map(\.minY).min() ?? managedAnchor.minY) - newDisplaySize.height
+                )
+            case .below:
+                return CGPoint(
+                    x: managedAnchor.minX,
+                    y: occupied.map(\.maxY).max() ?? managedAnchor.maxY
+                )
+            }
+        }
+
+        switch edge {
         case .right:
+            let anchor = physicalFrames.values.max { $0.maxX < $1.maxX } ?? mainFrame
             return CGPoint(
-                x: occupied.map(\.maxX).max() ?? mainFrame.maxX,
-                y: managedAnchor?.minY ?? mainFrame.minY
+                x: occupied.map(\.maxX).max() ?? anchor.maxX,
+                y: anchor.maxY - cursorIsolationSeam
             )
         case .left:
+            let anchor = physicalFrames.values.min { $0.minX < $1.minX } ?? mainFrame
             return CGPoint(
-                x: (occupied.map(\.minX).min() ?? mainFrame.minX) - newDisplaySize.width,
-                y: managedAnchor?.minY ?? mainFrame.minY
+                x: (occupied.map(\.minX).min() ?? anchor.minX) - newDisplaySize.width,
+                y: anchor.maxY - cursorIsolationSeam
             )
         case .above:
+            let anchor = physicalFrames.values.min { $0.minY < $1.minY } ?? mainFrame
             return CGPoint(
-                x: managedAnchor?.minX ?? mainFrame.minX,
-                y: (occupied.map(\.minY).min() ?? mainFrame.minY) - newDisplaySize.height
+                x: anchor.maxX - cursorIsolationSeam,
+                y: (occupied.map(\.minY).min() ?? anchor.minY) - newDisplaySize.height
             )
         case .below:
+            let anchor = physicalFrames.values.max { $0.maxY < $1.maxY } ?? mainFrame
             return CGPoint(
-                x: managedAnchor?.minX ?? mainFrame.minX,
-                y: occupied.map(\.maxY).max() ?? mainFrame.maxY
+                x: anchor.maxX - cursorIsolationSeam,
+                y: occupied.map(\.maxY).max() ?? anchor.maxY
             )
         }
     }

@@ -20,19 +20,18 @@ struct AboutSettingsView: View {
     }
 
     var body: some View {
-        ScrollView {
-            HStack(alignment: .center, spacing: 18) {
-                AboutIdentityCard(version: shortVersion)
-                    .frame(minWidth: 170, maxWidth: 280)
-                    .frame(height: 365)
+        SettingsPage {
+            productHero
 
-                detailsColumn
-                    .frame(minWidth: 190, maxWidth: 330)
+            HStack(alignment: .top, spacing: 14) {
+                versionCard
+                actionsCard
             }
-            .frame(maxWidth: .infinity)
-            .padding(.horizontal, 16)
-            .padding(.top, 22)
-            .padding(.bottom, 26)
+
+            Text("© \(copyrightYear) PiPanel · Made for macOS")
+                .font(.system(size: 9.5, weight: .medium))
+                .foregroundStyle(.tertiary)
+                .frame(maxWidth: .infinity)
         }
         .confirmationDialog(
             "恢复所有设置到默认？",
@@ -48,89 +47,119 @@ struct AboutSettingsView: View {
         }
     }
 
-    private var detailsColumn: some View {
-        VStack(spacing: 12) {
-            VStack(spacing: 11) {
-                Image(nsImage: appIcon)
-                    .resizable()
-                    .aspectRatio(contentMode: .fit)
-                    .frame(width: 76, height: 76)
-                    .shadow(color: SettingsTheme.accent.opacity(0.20), radius: 13, y: 6)
+    private var productHero: some View {
+        HStack(spacing: 17) {
+            Image(nsImage: appIcon)
+                .resizable()
+                .aspectRatio(contentMode: .fit)
+                .frame(width: 72, height: 72)
+                .shadow(color: SettingsTheme.accent.opacity(0.22), radius: 14, y: 7)
 
-                VStack(spacing: 3) {
-                    Text("PiPanel")
-                        .font(.system(size: 22, weight: .bold, design: .rounded))
-                    Text("让每个窗口，都恰到好处地悬浮")
-                        .font(.system(size: 11.5))
-                        .foregroundStyle(.secondary)
-                        .multilineTextAlignment(.center)
-                }
-
-                Divider().opacity(0.55)
-
-                VStack(spacing: 8) {
-                    aboutInfoRow("版本", value: shortVersion)
-                    aboutInfoRow("构建版本", value: buildNumber)
-                    aboutInfoRow("平台", value: "macOS")
-                }
+            VStack(alignment: .leading, spacing: 5) {
+                Text("PiPanel")
+                    .font(.system(size: 24, weight: .bold, design: .rounded))
+                Text("让每个窗口，都恰到好处地悬浮")
+                    .font(.system(size: 12))
+                    .foregroundStyle(.secondary)
+                Text("专为 macOS 打造")
+                    .font(.system(size: 9.5, weight: .bold, design: .rounded))
+                    .foregroundStyle(SettingsTheme.accent)
+                    .padding(.horizontal, 8)
+                    .padding(.vertical, 4)
+                    .background(SettingsTheme.accent.opacity(0.10), in: Capsule())
+                    .padding(.top, 2)
             }
-            .padding(16)
-            .background(aboutCardBackground)
 
-            VStack(spacing: 0) {
-                Button(action: checkForUpdates) {
-                    HStack(spacing: 9) {
-                        Image(systemName: "arrow.triangle.2.circlepath")
-                            .font(.system(size: 13, weight: .semibold))
-                            .foregroundStyle(SettingsTheme.accent)
-                            .frame(width: 20)
+            Spacer()
 
-                        VStack(alignment: .leading, spacing: 2) {
-                            Text("检查更新")
-                                .font(.system(size: 12.5, weight: .medium))
-                            Text("每天自动检查并在后台安装")
-                                .font(.system(size: 9.5))
-                                .foregroundStyle(.secondary)
-                        }
-
-                        Spacer()
-
-                        Image(systemName: "chevron.right")
-                            .font(.system(size: 9, weight: .semibold))
-                            .foregroundStyle(.tertiary)
-                    }
-                    .contentShape(Rectangle())
-                }
-                .buttonStyle(AboutActionButtonStyle())
-
-                Divider().padding(.horizontal, 13).opacity(0.55)
-
-                Button {
-                    isShowingResetConfirmation = true
-                } label: {
-                    HStack(spacing: 9) {
-                        Image(systemName: "arrow.counterclockwise")
-                            .font(.system(size: 13, weight: .semibold))
-                            .foregroundStyle(.red)
-                            .frame(width: 20)
-                        Text("恢复所有设置")
-                            .font(.system(size: 12.5, weight: .medium))
-                        Spacer()
-                        Image(systemName: "chevron.right")
-                            .font(.system(size: 9, weight: .semibold))
-                            .foregroundStyle(.tertiary)
-                    }
-                    .contentShape(Rectangle())
-                }
-                .buttonStyle(AboutActionButtonStyle())
-            }
-            .background(aboutCardBackground)
-
-            Text("© \(copyrightYear) PiPanel · Made for macOS")
-                .font(.system(size: 9.5, weight: .medium))
-                .foregroundStyle(.tertiary)
-                .padding(.top, 1)
+            Button("检查更新", action: checkForUpdates)
+                .buttonStyle(.borderedProminent)
+                .controlSize(.regular)
         }
+        .padding(18)
+        .background(
+            LinearGradient(
+                colors: [SettingsTheme.cardFill, SettingsTheme.accent.opacity(0.075)],
+                startPoint: .leading,
+                endPoint: .trailing
+            ),
+            in: RoundedRectangle(cornerRadius: 17, style: .continuous)
+        )
+        .overlay {
+            RoundedRectangle(cornerRadius: 17, style: .continuous)
+                .strokeBorder(SettingsTheme.cardBorder, lineWidth: 1)
+        }
+        .shadow(color: .black.opacity(0.045), radius: 10, y: 4)
+    }
+
+    private var versionCard: some View {
+        VStack(alignment: .leading, spacing: 13) {
+            Label("版本信息", systemImage: "shippingbox.fill")
+                .font(.system(size: 13.5, weight: .semibold))
+                .foregroundStyle(SettingsTheme.accent)
+
+            Divider()
+
+            aboutInfoRow("当前版本", value: shortVersion)
+            aboutInfoRow("构建版本", value: buildNumber)
+            aboutInfoRow("运行平台", value: "macOS")
+        }
+        .padding(16)
+        .frame(maxWidth: .infinity, alignment: .topLeading)
+        .background(aboutCardBackground)
+    }
+
+    private var actionsCard: some View {
+        VStack(spacing: 0) {
+            Button(action: checkForUpdates) {
+                aboutActionLabel(
+                    title: "软件更新",
+                    detail: "检查是否有新的 PiPanel 版本",
+                    icon: "arrow.triangle.2.circlepath",
+                    tint: SettingsTheme.accent
+                )
+            }
+            .buttonStyle(AboutActionButtonStyle())
+
+            Divider().padding(.leading, 49).opacity(0.55)
+
+            Button {
+                isShowingResetConfirmation = true
+            } label: {
+                aboutActionLabel(
+                    title: "恢复所有设置",
+                    detail: "保留当前的开机启动状态",
+                    icon: "arrow.counterclockwise",
+                    tint: .red
+                )
+            }
+            .buttonStyle(AboutActionButtonStyle())
+        }
+        .frame(maxWidth: .infinity)
+        .background(aboutCardBackground)
+    }
+
+    private func aboutActionLabel(title: String, detail: String, icon: String, tint: Color) -> some View {
+        HStack(spacing: 10) {
+            Image(systemName: icon)
+                .font(.system(size: 13, weight: .semibold))
+                .foregroundStyle(tint)
+                .frame(width: 28, height: 28)
+                .background(tint.opacity(0.11), in: RoundedRectangle(cornerRadius: 8, style: .continuous))
+
+            VStack(alignment: .leading, spacing: 2) {
+                Text(title)
+                    .font(.system(size: 12.5, weight: .medium))
+                Text(detail)
+                    .font(.system(size: 9.5))
+                    .foregroundStyle(.secondary)
+            }
+            Spacer()
+            Image(systemName: "chevron.right")
+                .font(.system(size: 9, weight: .semibold))
+                .foregroundStyle(.tertiary)
+        }
+        .contentShape(Rectangle())
     }
 
     private func aboutInfoRow(_ title: String, value: String) -> some View {
@@ -158,8 +187,11 @@ struct AboutSettingsView: View {
     }
 }
 
-private struct AboutIdentityCard: View {
+struct PiPanelIdentityCard: View {
     let version: String
+    var title = "PiPanel"
+    var tagline = "FLOAT YOUR FOCUS"
+    var variant = 0
 
     @Environment(\.colorScheme) private var colorScheme
     @State private var isHovering = false
@@ -175,7 +207,7 @@ private struct AboutIdentityCard: View {
                 RoundedRectangle(cornerRadius: 20, style: .continuous)
                     .fill(cardGradient)
 
-                PiPanelCardArtwork(isHovering: isHovering)
+                PiPanelCardArtwork(isHovering: isHovering, variant: variant)
                     .frame(height: proxy.size.height * 0.58)
                     .frame(maxHeight: .infinity, alignment: .top)
                     .padding(13)
@@ -183,12 +215,12 @@ private struct AboutIdentityCard: View {
                 VStack(alignment: .leading, spacing: 0) {
                     Spacer()
 
-                    Text("PiPanel")
+                    Text(title)
                         .font(.system(size: 28, weight: .black, design: .rounded))
                         .tracking(-1)
                         .foregroundStyle(Color.aboutCardInk)
 
-                    Text("FLOAT YOUR FOCUS")
+                    Text(tagline)
                         .font(.system(size: 9.5, weight: .bold, design: .rounded))
                         .tracking(1.35)
                         .foregroundStyle(Color.aboutCardInk.opacity(0.76))
@@ -249,12 +281,28 @@ private struct AboutIdentityCard: View {
 
     private var cardGradient: LinearGradient {
         LinearGradient(
-            colors: colorScheme == .dark
-                ? [Color(red: 0.18, green: 0.19, blue: 0.29), Color(red: 0.12, green: 0.14, blue: 0.22)]
-                : [Color(red: 0.97, green: 0.97, blue: 0.88), Color(red: 0.90, green: 0.94, blue: 0.99)],
+            colors: cardColors,
             startPoint: .topLeading,
             endPoint: .bottomTrailing
         )
+    }
+
+    private var cardColors: [Color] {
+        if colorScheme == .dark {
+            switch variant % 4 {
+            case 1: return [Color(red: 0.23, green: 0.16, blue: 0.27), Color(red: 0.12, green: 0.12, blue: 0.21)]
+            case 2: return [Color(red: 0.12, green: 0.24, blue: 0.24), Color(red: 0.09, green: 0.14, blue: 0.20)]
+            case 3: return [Color(red: 0.25, green: 0.20, blue: 0.12), Color(red: 0.16, green: 0.12, blue: 0.17)]
+            default: return [Color(red: 0.18, green: 0.19, blue: 0.29), Color(red: 0.12, green: 0.14, blue: 0.22)]
+            }
+        }
+
+        switch variant % 4 {
+        case 1: return [Color(red: 1.00, green: 0.92, blue: 0.91), Color(red: 0.94, green: 0.90, blue: 1.00)]
+        case 2: return [Color(red: 0.89, green: 0.98, blue: 0.93), Color(red: 0.88, green: 0.94, blue: 1.00)]
+        case 3: return [Color(red: 1.00, green: 0.96, blue: 0.82), Color(red: 0.95, green: 0.89, blue: 0.95)]
+        default: return [Color(red: 0.97, green: 0.97, blue: 0.88), Color(red: 0.90, green: 0.94, blue: 0.99)]
+        }
     }
 
     private func normalized(_ value: CGFloat, length: CGFloat) -> CGFloat {
@@ -265,6 +313,7 @@ private struct AboutIdentityCard: View {
 
 private struct PiPanelCardArtwork: View {
     let isHovering: Bool
+    let variant: Int
 
     var body: some View {
         GeometryReader { proxy in
@@ -272,7 +321,7 @@ private struct PiPanelCardArtwork: View {
                 AboutBlobShape()
                     .fill(
                         LinearGradient(
-                            colors: [Color(red: 0.27, green: 0.36, blue: 0.98), Color(red: 0.83, green: 0.29, blue: 0.55)],
+                            colors: artworkColors,
                             startPoint: .topLeading,
                             endPoint: .bottomTrailing
                         )
@@ -291,7 +340,7 @@ private struct PiPanelCardArtwork: View {
                     .overlay {
                         Image(systemName: "pip.fill")
                             .font(.system(size: 15, weight: .semibold))
-                            .foregroundStyle(Color(red: 0.30, green: 0.37, blue: 0.96))
+                            .foregroundStyle(artworkColors[0])
                     }
                     .offset(
                         x: isHovering ? proxy.size.width * 0.26 : proxy.size.width * 0.20,
@@ -310,6 +359,20 @@ private struct PiPanelCardArtwork: View {
                 }
             }
             .animation(.spring(response: 0.55, dampingFraction: 0.72), value: isHovering)
+            .animation(.easeInOut(duration: 0.28), value: variant)
+        }
+    }
+
+    private var artworkColors: [Color] {
+        switch variant % 4 {
+        case 1:
+            return [Color(red: 0.92, green: 0.28, blue: 0.47), Color(red: 0.49, green: 0.28, blue: 0.91)]
+        case 2:
+            return [Color(red: 0.08, green: 0.62, blue: 0.58), Color(red: 0.10, green: 0.43, blue: 0.96)]
+        case 3:
+            return [Color(red: 0.96, green: 0.54, blue: 0.13), Color(red: 0.76, green: 0.27, blue: 0.65)]
+        default:
+            return [Color(red: 0.27, green: 0.36, blue: 0.98), Color(red: 0.83, green: 0.29, blue: 0.55)]
         }
     }
 }

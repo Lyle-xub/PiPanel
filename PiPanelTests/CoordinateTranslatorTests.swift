@@ -62,19 +62,19 @@ final class PiPActivationMethodTests: XCTestCase {
 
 final class SettingsStoreTests: XCTestCase {
     @MainActor
-    func testNewInstallUsesLowerResourceDefaultsAndCornerCloseButton() {
+    func testNewInstallUsesSharperDefaultsAndCornerCloseButton() {
         let (defaults, suiteName) = makeIsolatedDefaults()
         defer { defaults.removePersistentDomain(forName: suiteName) }
 
         let settings = SettingsStore(userDefaults: defaults)
 
-        XCTAssertEqual(settings.virtualDisplayLongEdge, 1664)
+        XCTAssertEqual(settings.virtualDisplayLongEdge, 1920)
         let virtualDisplaySize = VirtualDisplayHost.pixelSize(
             forLongEdge: settings.virtualDisplayLongEdge
         )
-        XCTAssertEqual(virtualDisplaySize.width, 1664)
-        XCTAssertEqual(virtualDisplaySize.height, 1040)
-        XCTAssertEqual(settings.captureOutputLongEdge, 960)
+        XCTAssertEqual(virtualDisplaySize.width, 1920)
+        XCTAssertEqual(virtualDisplaySize.height, 1200)
+        XCTAssertEqual(settings.captureOutputLongEdge, 1280)
         XCTAssertEqual(settings.panelCloseMethod, .cornerButton)
     }
 
@@ -122,6 +122,7 @@ final class SettingsStoreTests: XCTestCase {
         settings.stackCascadeMargin = 48
         settings.stackMaxVisibleDepth = 10
         settings.panelAppearRippleEnabled = false
+        settings.controlModeGlowEnabled = false
         settings.panelBackgroundColorHex = "654321"
         settings.panelBorderStyle = .glow
         settings.panelBorderColorHex = "ABCDEF"
@@ -221,6 +222,12 @@ final class SettingsStoreTests: XCTestCase {
         XCTAssertEqual(
             settings.panelAppearRippleEnabled,
             values.panelAppearRippleEnabled,
+            file: file,
+            line: line
+        )
+        XCTAssertEqual(
+            settings.controlModeGlowEnabled,
+            values.controlModeGlowEnabled,
             file: file,
             line: line
         )
@@ -792,6 +799,137 @@ final class CoordinateTranslatorTests: XCTestCase {
     }
 }
 
+final class PiPContentScalingPolicyTests: XCTestCase {
+    func testVirtualDisplayCapacityDoesNotLetterboxFreelyResizableApp() {
+        XCTAssertFalse(
+            PiPContentScalingPolicy.shouldUseFit(
+                sourceEquivalentSize: CGSize(width: 3200, height: 1800),
+                discoveredAppMinimum: .zero,
+                discoveredAppMaximum: CGSize(width: CGFloat.infinity, height: CGFloat.infinity)
+            )
+        )
+    }
+
+    func testConfirmedAppMinimumStillUsesFitBelowFloor() {
+        XCTAssertTrue(
+            PiPContentScalingPolicy.shouldUseFit(
+                sourceEquivalentSize: CGSize(width: 600, height: 360),
+                discoveredAppMinimum: CGSize(width: 700, height: 400),
+                discoveredAppMaximum: CGSize(width: CGFloat.infinity, height: CGFloat.infinity)
+            )
+        )
+    }
+
+    func testConfirmedAppMaximumStillUsesFitAboveCeiling() {
+        XCTAssertTrue(
+            PiPContentScalingPolicy.shouldUseFit(
+                sourceEquivalentSize: CGSize(width: 1200, height: 800),
+                discoveredAppMinimum: .zero,
+                discoveredAppMaximum: CGSize(width: 1000, height: 700)
+            )
+        )
+    }
+
+    func testCornerResizeUsesFitWhenDisplayClampPullsRestrictedAxisBelowFloor() {
+        XCTAssertTrue(
+            PiPContentScalingPolicy.shouldUseFit(
+                sourceEquivalentSize: CGSize(width: 1588, height: 1559),
+                effectiveResizeTarget: CGSize(width: 791, height: 776),
+                discoveredAppMinimum: CGSize(width: 940, height: 0),
+                discoveredAppMaximum: CGSize(width: CGFloat.infinity, height: CGFloat.infinity)
+            )
+        )
+    }
+
+    func testDisplayClampAloneDoesNotUseFitWithoutAppRestriction() {
+        XCTAssertFalse(
+            PiPContentScalingPolicy.shouldUseFit(
+                sourceEquivalentSize: CGSize(width: 1588, height: 1559),
+                effectiveResizeTarget: CGSize(width: 791, height: 776),
+                discoveredAppMinimum: .zero,
+                discoveredAppMaximum: CGSize(width: CGFloat.infinity, height: CGFloat.infinity)
+            )
+        )
+    }
+
+    func testGhosttyCellSnappingUsesUncroppedMinorCorrection() {
+        XCTAssertTrue(
+            PiPContentScalingPolicy.shouldStretchMinorAspectMismatch(
+                containerSize: CGSize(width: 340, height: 200),
+                capturedContentSize: CGSize(width: 328, height: 188)
+            )
+        )
+    }
+
+    func testLargeResizeCatchUpMismatchStillUsesAspectFill() {
+        XCTAssertFalse(
+            PiPContentScalingPolicy.shouldStretchMinorAspectMismatch(
+                containerSize: CGSize(width: 400, height: 300),
+                capturedContentSize: CGSize(width: 640, height: 360)
+            )
+        )
+    }
+}
+
+final class ResizeConstraintProbePolicyTests: XCTestCase {
+    func testUniformlyScaledWidthStillProbesAppCeilingWhenHeightOwnsClamp() {
+        XCTAssertFalse(
+            ResizeConstraintProbePolicy.displayOwnsAxis(
+                requested: 1254,
+                target: 971,
+                capacity: 1360
+            )
+        )
+    }
+
+    func testAxisAtDisplayEdgeDoesNotBecomeFakeAppConstraint() {
+        XCTAssertTrue(
+            ResizeConstraintProbePolicy.displayOwnsAxis(
+                requested: 1002,
+                target: 776,
+                capacity: 776
+            )
+        )
+    }
+
+    func testUnclampedRequestRemainsValidAppConstraintProbe() {
+        XCTAssertFalse(
+            ResizeConstraintProbePolicy.displayOwnsAxis(
+                requested: 907,
+                target: 907,
+                capacity: 1360
+            )
+        )
+    }
+}
+
+final class PiPPanelAspectPolicyTests: XCTestCase {
+    func testTopologyReflowMatchesSettledSourceAspectWithoutChangingWidth() {
+        let size = PiPPanelAspectPolicy.matchingSize(
+            currentSize: CGSize(width: 732, height: 578),
+            capturedContentSize: CGSize(width: 948, height: 558),
+            minimumSize: CGSize(width: 160, height: 100),
+            maximumSize: CGSize(width: 1840, height: 1090)
+        )
+
+        XCTAssertEqual(size.width, 732, accuracy: 0.01)
+        XCTAssertEqual(size.height, 430.86, accuracy: 0.01)
+    }
+
+    func testTinyCropInsetMismatchDoesNotResizePanel() {
+        let current = CGSize(width: 340, height: 200)
+        XCTAssertEqual(
+            PiPPanelAspectPolicy.matchingSize(
+                currentSize: current,
+                capturedContentSize: CGSize(width: 328, height: 188),
+                minimumSize: CGSize(width: 160, height: 100),
+                maximumSize: CGSize(width: 1840, height: 1090)
+            ),
+            current
+        )
+    }
+}
+
 final class FlingCandidateMatcherTests: XCTestCase {
     func testUniqueBilibiliTitleWinsWhenScreenCaptureFrameIsStale() {
         let candidates = [
@@ -1091,7 +1229,7 @@ final class VirtualDisplayPlacementTests: XCTestCase {
                 mainDisplayID: mainDisplayID,
                 newDisplaySize: CGSize(width: 1280, height: 800)
             ),
-            CGPoint(x: 4480, y: 0)
+            CGPoint(x: 4480, y: 1439)
         )
     }
 
@@ -1115,7 +1253,7 @@ final class VirtualDisplayPlacementTests: XCTestCase {
                 mainDisplayID: mainDisplayID,
                 newDisplaySize: CGSize(width: 1280, height: 800)
             ),
-            CGPoint(x: 0, y: 2280)
+            CGPoint(x: 2039, y: 2280)
         )
     }
 
@@ -1139,7 +1277,7 @@ final class VirtualDisplayPlacementTests: XCTestCase {
                 mainDisplayID: mainDisplayID,
                 newDisplaySize: CGSize(width: 1280, height: 800)
             ),
-            CGPoint(x: 0, y: -2000)
+            CGPoint(x: 2039, y: -2000)
         )
     }
 
@@ -1148,7 +1286,7 @@ final class VirtualDisplayPlacementTests: XCTestCase {
             mainDisplayID: CGRect(x: 640, y: 0, width: 1920, height: 1080),
             2: CGRect(x: 640, y: 1080, width: 1920, height: 1200),
         ]
-        let firstVirtual = CGRect(x: 0, y: 2280, width: 1280, height: 800)
+        let firstVirtual = CGRect(x: 2039, y: 2280, width: 1280, height: 800)
 
         XCTAssertEqual(
             VirtualDisplayHost.placementOrigin(
@@ -1157,7 +1295,7 @@ final class VirtualDisplayPlacementTests: XCTestCase {
                 mainDisplayID: mainDisplayID,
                 newDisplaySize: CGSize(width: 1280, height: 800)
             ),
-            CGPoint(x: 0, y: 3080)
+            CGPoint(x: 2039, y: 3080)
         )
     }
 
@@ -1174,7 +1312,7 @@ final class VirtualDisplayPlacementTests: XCTestCase {
                 mainDisplayID: mainDisplayID,
                 newDisplaySize: CGSize(width: 1280, height: 800)
             ),
-            CGPoint(x: -3840, y: 0)
+            CGPoint(x: -3840, y: 1439)
         )
     }
 
@@ -1193,7 +1331,7 @@ final class VirtualDisplayPlacementTests: XCTestCase {
             mainDisplayID: CGRect(x: 0, y: 0, width: 1920, height: 1080),
             2: CGRect(x: 0, y: 1080, width: 1920, height: 1200),
         ]
-        let firstVirtual = CGRect(x: 0, y: 2280, width: 2560, height: 1600)
+        let firstVirtual = CGRect(x: 1919, y: 2280, width: 2560, height: 1600)
 
         XCTAssertEqual(
             VirtualDisplayHost.placementOrigin(
@@ -1202,7 +1340,45 @@ final class VirtualDisplayPlacementTests: XCTestCase {
                 mainDisplayID: mainDisplayID,
                 newDisplaySize: CGSize(width: 2560, height: 1600)
             ),
-            CGPoint(x: 0, y: 3880)
+            CGPoint(x: 1919, y: 3880)
         )
+    }
+}
+
+final class VirtualDisplayCursorGuardGeometryTests: XCTestCase {
+    private let leftScreen = CGRect(x: -1920, y: 0, width: 1920, height: 1080)
+    private let mainScreen = CGRect(x: 0, y: 0, width: 2560, height: 1440)
+
+    func testRecoveryPrefersOriginalPhysicalEntryPoint() {
+        let recovered = VirtualDisplayCursorGuard.recoveryPoint(
+            preferredPoint: CGPoint(x: 1200, y: 500),
+            lastPhysicalPoint: CGPoint(x: 200, y: 200),
+            cursorPoint: CGPoint(x: 2560, y: 1439),
+            physicalFrames: [leftScreen, mainScreen]
+        )
+
+        XCTAssertEqual(recovered, CGPoint(x: 1200, y: 500))
+    }
+
+    func testRecoveryInsetsLastPointFromPhysicalEdge() {
+        let recovered = VirtualDisplayCursorGuard.recoveryPoint(
+            preferredPoint: nil,
+            lastPhysicalPoint: CGPoint(x: 2559.5, y: 1439.5),
+            cursorPoint: CGPoint(x: 2560, y: 1439),
+            physicalFrames: [mainScreen]
+        )
+
+        XCTAssertEqual(recovered, CGPoint(x: 2554, y: 1434))
+    }
+
+    func testRecoveryChoosesNearestPhysicalDisplayWithoutHistory() {
+        let recovered = VirtualDisplayCursorGuard.recoveryPoint(
+            preferredPoint: nil,
+            lastPhysicalPoint: nil,
+            cursorPoint: CGPoint(x: -2050, y: 400),
+            physicalFrames: [leftScreen, mainScreen]
+        )
+
+        XCTAssertEqual(recovered, CGPoint(x: -1914, y: 400))
     }
 }
