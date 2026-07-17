@@ -44,6 +44,7 @@ targets:
         Release:
           CODE_SIGN_IDENTITY: Developer ID Application
     dependencies:
+      - sdk: AVKit.framework
       - package: Sparkle
 
   PiPanelTests:

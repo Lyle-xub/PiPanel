@@ -7,6 +7,7 @@
 	objects = {
 
 /* Begin PBXBuildFile section */
+		A7B1C2D30000000000000002 /* AVKit.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = A7B1C2D30000000000000001 /* AVKit.framework */; };
 		D7A1C0DE0000000000000002 /* UpdateManager.swift in Sources */ = {isa = PBXBuildFile; fileRef = D7A1C0DE0000000000000001 /* UpdateManager.swift */; };
 		D7A1C0DE0000000000000004 /* Sparkle in Frameworks */ = {isa = PBXBuildFile; productRef = D7A1C0DE0000000000000003 /* Sparkle */; };
 		A6E8C11D73B847FA91D40001 /* AdvancedSettingsView.swift in Sources */ = {isa = PBXBuildFile; fileRef = A6E8C11D73B847FA91D40002 /* AdvancedSettingsView.swift */; };
@@ -90,6 +91,7 @@
 /* End PBXContainerItemProxy section */
 
 /* Begin PBXFileReference section */
+		A7B1C2D30000000000000001 /* AVKit.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = AVKit.framework; path = System/Library/Frameworks/AVKit.framework; sourceTree = SDKROOT; };
 		D7A1C0DE0000000000000001 /* UpdateManager.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = UpdateManager.swift; sourceTree = "<group>"; };
 		A6E8C11D73B847FA91D40002 /* AdvancedSettingsView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AdvancedSettingsView.swift; sourceTree = "<group>"; };
 		01AF7CBFFD520347D21462D6 /* PiPanelLogger.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PiPanelLogger.swift; sourceTree = "<group>"; };
@@ -189,6 +191,7 @@
 			children = (
 				14F581C02FD4E15272376F8F /* PiPanel */,
 				770D3D5E9C2819C774F13B0D /* PiPanelTests */,
+				A7B1C2D30000000000000001 /* AVKit.framework */,
 				8A58110C88C3C0D6B1D7D3AA /* Products */,
 			);
 			sourceTree = "<group>";
@@ -370,6 +373,7 @@
 			isa = PBXFrameworksBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
+				A7B1C2D30000000000000002 /* AVKit.framework in Frameworks */,
 				D7A1C0DE0000000000000004 /* Sparkle in Frameworks */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;

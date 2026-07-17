@@ -1215,7 +1215,9 @@ private struct TutorialVideoGallery: View {
 private struct TutorialVideoPlayer: View {
     let video: TutorialVideo
 
-    @State private var player = AVPlayer()
+    // Creating AVPlayer lazily follows AVKit's SwiftUI lifecycle guidance and avoids doing media
+    // work while SwiftUI is still constructing the final onboarding page.
+    @State private var player: AVPlayer?
     @State private var didLoad = false
 
     var body: some View {
@@ -1257,21 +1259,27 @@ private struct TutorialVideoPlayer: View {
         }
         .shadow(color: Color.inkBlue.opacity(0.18), radius: 22, y: 12)
         .rotationEffect(.degrees(0.35))
-        .onAppear { load(video) }
-        .onChange(of: video) { _, newValue in load(newValue) }
-        .onDisappear { player.pause() }
+        .task(id: video.id) { load(video) }
+        .onDisappear {
+            player?.pause()
+            player = nil
+        }
     }
 
     private func load(_ video: TutorialVideo) {
         let url = Bundle.main.url(forResource: video.id, withExtension: "mp4", subdirectory: "TutorialVideos")
             ?? Bundle.main.url(forResource: video.id, withExtension: "mp4")
         guard let url else {
+            player?.pause()
+            player = nil
             didLoad = false
             return
         }
+        let nextPlayer = AVPlayer(url: url)
+        player?.pause()
+        player = nextPlayer
         didLoad = true
-        player.replaceCurrentItem(with: AVPlayerItem(url: url))
-        player.play()
+        nextPlayer.play()
     }
 }
 

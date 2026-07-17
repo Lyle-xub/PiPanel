@@ -70,6 +70,16 @@ xcodebuild \
 
 ditto "$derived_data/Build/Products/Release/PiPanel.app" "$app_path"
 xattr -cr "$app_path"
+
+# SwiftUI's VideoPlayer compiles against the private _AVKit_SwiftUI overlay, but optimized release
+# builds can omit the parent AVKit framework unless it is an explicit target dependency. Such an
+# app passes compilation and signing, then aborts in getSuperclassMetadata when onboarding first
+# constructs VideoPlayer. Refuse to package that broken binary again.
+if ! otool -L "$app_path/Contents/MacOS/PiPanel" | rg -q '/AVKit\.framework/'; then
+    echo "Release executable is missing its explicit AVKit.framework dependency" >&2
+    exit 1
+fi
+
 "$root_dir/scripts/sign_release_app.sh" "$app_path" "$identity"
 
 if [[ "$(lipo -archs "$app_path/Contents/MacOS/PiPanel")" != *arm64* ]] \
