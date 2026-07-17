@@ -67,7 +67,21 @@ sign_target() {
     if codesign -d "$target" >/dev/null 2>&1; then
         target_args+=(--preserve-metadata=identifier,entitlements,requirements)
     fi
-    codesign "${target_args[@]}" "$target"
+
+    # Apple's TSA occasionally drops an otherwise valid request. A release must never fall back
+    # to an unsigned timestamp, but retrying the identical secure operation is safe and prevents a
+    # momentary service hiccup from discarding a completed Universal build.
+    local attempt
+    for attempt in 1 2 3 4 5; do
+        if codesign "${target_args[@]}" "$target"; then
+            return 0
+        fi
+        if [[ "$identity" == "-" || "$identity" == "PiPanel Local Code Signing" || "$attempt" -eq 5 ]]; then
+            return 1
+        fi
+        echo "codesign failed for $target; retrying secure timestamp ($attempt/5)…" >&2
+        sleep $((attempt * 2))
+    done
 }
 
 # Sign inside-out so every enclosing bundle seals the final signatures of its children.
