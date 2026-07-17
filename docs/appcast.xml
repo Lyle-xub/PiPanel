@@ -6,13 +6,13 @@
         <description>PiPanel 的稳定版自动更新</description>
         <language>zh-cn</language>
         <item>
-            <title>1.0.1</title>
-            <pubDate>Fri, 17 Jul 2026 17:16:47 +0800</pubDate>
+            <title>1.0.2</title>
+            <pubDate>Sat, 18 Jul 2026 03:00:06 +0800</pubDate>
             <link>https://pipanel.app/</link>
-            <sparkle:version>7</sparkle:version>
-            <sparkle:shortVersionString>1.0.1</sparkle:shortVersionString>
+            <sparkle:version>8</sparkle:version>
+            <sparkle:shortVersionString>1.0.2</sparkle:shortVersionString>
             <sparkle:minimumSystemVersion>14.0</sparkle:minimumSystemVersion>
-            <enclosure url="https://github.com/Lyle-xub/PiPanel/releases/download/v1.0.1/PiPanel-1.0.1-macOS-universal.zip" length="14969170" type="application/octet-stream" sparkle:edSignature="1AS0LOsHoWKiMvnRh0Wle+BoZt5BeAbbsHTMySC7nVmUjzLeCF0raUVRpev6kLhPd3SORj4irMELUwffEs6qAw=="/>
+            <enclosure url="https://github.com/Lyle-xub/PiPanel/releases/download/v1.0.2/PiPanel-1.0.2-macOS-universal.zip" length="15243013" type="application/octet-stream" sparkle:edSignature="oF3RMA+q55LyJmYNeMBP1UkoYOnOICbAft55cOGvnHei4umty8tJrCkY2aJoTwBp2jk1CEIPYhiexia3j/P8Aw=="/>
         </item>
     </channel>
 </rss>
