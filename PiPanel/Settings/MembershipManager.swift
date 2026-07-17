@@ -1,5 +1,48 @@
 import Foundation
 import AppKit
+import CryptoKit
+import IOKit
+
+/// Provides a reinstall-stable, privacy-preserving identity for license activation. Only a
+/// SHA-256 digest of IOPlatformUUID leaves the Mac; the raw hardware UUID is never persisted or
+/// transmitted. The Keychain installation UUID remains a fallback for unusual systems where the
+/// platform expert does not expose IOPlatformUUID.
+enum DeviceIdentity {
+    static var stableDeviceID: String? {
+        let service = IOServiceGetMatchingService(
+            kIOMainPortDefault,
+            IOServiceMatching("IOPlatformExpertDevice")
+        )
+        guard service != 0 else { return nil }
+        defer { IOObjectRelease(service) }
+
+        guard let rawValue = IORegistryEntryCreateCFProperty(
+            service,
+            "IOPlatformUUID" as CFString,
+            kCFAllocatorDefault,
+            0
+        )?.takeRetainedValue() as? String else { return nil }
+
+        let normalized = rawValue.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
+        guard !normalized.isEmpty else { return nil }
+        return hashedIdentifier(normalized)
+    }
+
+    static func hashedIdentifier(_ value: String) -> String {
+        SHA256.hash(data: Data(value.utf8))
+            .map { String(format: "%02x", $0) }
+            .joined()
+    }
+
+    static func activationName(hostName: String, deviceID: String) -> String {
+        let normalizedHostName = hostName.trimmingCharacters(in: .whitespacesAndNewlines)
+        let readableName = normalizedHostName.isEmpty ? "Mac" : normalizedHostName
+        let suffix = deviceID.prefix(12).uppercased()
+        let reservedSuffixLength = suffix.count + 3 // " · "
+        let prefix = String(readableName.prefix(max(1, 80 - reservedSuffixLength)))
+        return "\(prefix) · \(suffix)"
+    }
+}
 
 /// Gates everything in GeneralSettingsView/AppearanceSettingsView except Launch at Login (the one
 /// setting explicitly kept free) behind either a server-issued seven-day trial or a Creem license
@@ -143,10 +186,15 @@ final class MembershipManager: ObservableObject {
         isValidating = true
         defer { isValidating = false }
         do {
-            // A short stable suffix keeps two Macs with the same host name distinguishable in
-            // device management and lets us identify the exact instance Creem just created.
+            // A hardware-derived digest makes activation idempotent even after the application
+            // and its Keychain records are removed. The Worker never receives the raw platform
+            // UUID and uses this digest only to reuse this Mac's existing Creem instance.
             let instanceName = deviceActivationName
-            let response = try await CreemClient.activate(licenseKey: trimmed, instanceName: instanceName)
+            let response = try await CreemClient.activate(
+                licenseKey: trimmed,
+                instanceName: instanceName,
+                deviceId: licenseDeviceId
+            )
             // Creem activation returns the instance it just created. The Worker may also expand
             // responses for compatibility, so still prefer the exact name we sent.
             let activatedInstance = response.instances.last(where: { $0.name == instanceName })
@@ -561,13 +609,14 @@ final class MembershipManager: ObservableObject {
     }
 
     private var deviceActivationName: String {
-        let hostName = ProcessInfo.processInfo.hostName
-            .trimmingCharacters(in: .whitespacesAndNewlines)
-        let readableName = hostName.isEmpty ? "Mac" : hostName
-        let suffix = trialDeviceId.replacingOccurrences(of: "-", with: "").suffix(4).uppercased()
-        let reservedSuffixLength = suffix.count + 3 // " · "
-        let prefix = String(readableName.prefix(max(1, 80 - reservedSuffixLength)))
-        return "\(prefix) · \(suffix)"
+        DeviceIdentity.activationName(
+            hostName: ProcessInfo.processInfo.hostName,
+            deviceID: licenseDeviceId
+        )
+    }
+
+    private var licenseDeviceId: String {
+        DeviceIdentity.stableDeviceID ?? DeviceIdentity.hashedIdentifier(trialDeviceId)
     }
 
     private var trialDeviceId: String {

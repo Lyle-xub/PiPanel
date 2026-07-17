@@ -403,6 +403,21 @@ async function handleLicenseAction(request, env, action) {
     payload[field] = value;
   }
 
+  // Current clients send a one-way hardware digest so activation is idempotent across app and
+  // Keychain deletion. Keep it out of the Creem payload: this is PiPanel-owned routing metadata,
+  // not part of Creem's license API. Older clients omit it and retain the legacy behavior.
+  const deviceId = action === 'activate' && typeof body.device_id === 'string'
+    ? body.device_id.trim()
+    : '';
+  if (action === 'activate' && deviceId && !isValidDeviceId(deviceId)) {
+    return json({ error: 'invalid device_id' }, 400);
+  }
+
+  if (action === 'activate' && deviceId) {
+    const existingResponse = await reuseDeviceActivation(env, payload.key, deviceId);
+    if (existingResponse) return existingResponse;
+  }
+
   const response = await fetch(`${creemApiBase(env)}/v1/licenses/${action}`, {
     method: 'POST',
     headers: {
@@ -420,7 +435,12 @@ async function handleLicenseAction(request, env, action) {
       const instances = normalizeInstances(license?.instance);
       const activated = instances.find((instance) => instance?.name === payload.instance_name)
         ?? instances.at(-1);
-      if (activated?.id) await rememberLicenseInstance(env, payload.key, activated.id);
+      if (activated?.id) {
+        await rememberLicenseInstance(env, payload.key, activated.id);
+        if (deviceId) {
+          await rememberDeviceActivation(env, payload.key, deviceId, activated.id);
+        }
+      }
     } else if (action === 'validate') {
       // Creem returns only the instance named by instance_id even though `activation` is the
       // total number of active instances. Expand the validated response with every other instance
@@ -447,6 +467,63 @@ async function handleLicenseAction(request, env, action) {
     status: response.status,
     headers: { 'Content-Type': response.headers.get('Content-Type') ?? 'application/json' },
   });
+}
+
+async function reuseDeviceActivation(env, licenseKey, deviceId) {
+  const mappingKey = await deviceActivationStorageKey(licenseKey, deviceId);
+  const instanceId = await env.PIPANEL_LICENSES.get(mappingKey);
+  if (!instanceId) return null;
+
+  let response;
+  try {
+    response = await fetch(`${creemApiBase(env)}/v1/licenses/validate`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'Accept': 'application/json',
+        'x-api-key': env.CREEM_API_KEY,
+      },
+      body: JSON.stringify({ key: licenseKey, instance_id: instanceId }),
+    });
+  } catch (error) {
+    // Never create a second instance merely because validation is temporarily unreachable.
+    console.error('Creem device activation lookup failed', instanceId, error);
+    return json({ error: 'license service unavailable' }, 503);
+  }
+
+  const responseText = await response.text();
+  if (response.ok) {
+    await rememberLicenseInstance(env, licenseKey, instanceId);
+    return new Response(responseText || '{}', {
+      status: response.status,
+      headers: { 'Content-Type': response.headers.get('Content-Type') ?? 'application/json' },
+    });
+  }
+
+  if ([404, 409, 410].includes(response.status)) {
+    // The mapped Creem instance is definitively gone. Remove both indexes and allow one fresh
+    // activation below; transient upstream failures intentionally do not take this path.
+    await env.PIPANEL_LICENSES.delete(mappingKey);
+    await forgetLicenseInstance(env, licenseKey, instanceId);
+    return null;
+  }
+
+  // Propagate rate limits and server failures instead of consuming another activation slot.
+  return new Response(responseText || '{}', {
+    status: response.status,
+    headers: { 'Content-Type': response.headers.get('Content-Type') ?? 'application/json' },
+  });
+}
+
+async function rememberDeviceActivation(env, licenseKey, deviceId, instanceId) {
+  const mappingKey = await deviceActivationStorageKey(licenseKey, deviceId);
+  await env.PIPANEL_LICENSES.put(mappingKey, instanceId);
+}
+
+async function deviceActivationStorageKey(licenseKey, deviceId) {
+  // Avoid embedding the customer's license key in a new KV key even though older instance indexes
+  // predate this rule. Device IDs are already one-way digests generated on the Mac.
+  return `device-instance:${await sha256Hex(licenseKey)}:${deviceId}`;
 }
 
 function parseJson(value) {

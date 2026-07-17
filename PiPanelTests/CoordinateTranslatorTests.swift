@@ -260,6 +260,30 @@ final class SettingsStoreTests: XCTestCase {
     }
 }
 
+final class DeviceIdentityTests: XCTestCase {
+    func testHardwareIdentifierHashIsStableAndDoesNotExposeRawIdentifier() {
+        let rawIdentifier = "AAAAAAAA-BBBB-CCCC-DDDD-EEEEEEEEEEEE"
+        let first = DeviceIdentity.hashedIdentifier(rawIdentifier)
+        let second = DeviceIdentity.hashedIdentifier(rawIdentifier)
+
+        XCTAssertEqual(first, second)
+        XCTAssertEqual(first.count, 64)
+        XCTAssertNotEqual(first.lowercased(), rawIdentifier.lowercased())
+        XCTAssertTrue(first.allSatisfy { $0.isHexDigit })
+    }
+
+    func testActivationNameUsesStableDigestAndStaysWithinCreemLimit() {
+        let deviceID = DeviceIdentity.hashedIdentifier("stable-hardware-id")
+        let name = DeviceIdentity.activationName(
+            hostName: String(repeating: "MacBook-Pro-", count: 10),
+            deviceID: deviceID
+        )
+
+        XCTAssertLessThanOrEqual(name.count, 80)
+        XCTAssertTrue(name.hasSuffix(" · \(deviceID.prefix(12).uppercased())"))
+    }
+}
+
 final class PanelPlacementAnchorTests: XCTestCase {
     func testTopRightAnchorSurvivesPhysicalScreenOriginChange() {
         let anchor = PanelPlacementAnchor(

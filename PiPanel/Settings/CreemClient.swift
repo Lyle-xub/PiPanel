@@ -60,10 +60,18 @@ enum CreemClient {
         var valid: Bool { status == "active" }
     }
 
-    static func activate(licenseKey: String, instanceName: String) async throws -> LicenseResponse {
+    static func activate(
+        licenseKey: String,
+        instanceName: String,
+        deviceId: String
+    ) async throws -> LicenseResponse {
         let response: LicenseResponse = try await post(
             path: "activate",
-            body: ["key": licenseKey, "instance_name": instanceName],
+            body: [
+                "key": licenseKey,
+                "instance_name": instanceName,
+                "device_id": deviceId
+            ],
             errorMap: [403: .activationLimitReached, 404: .invalidLicenseKey]
         )
         return response

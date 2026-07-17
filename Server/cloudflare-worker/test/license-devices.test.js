@@ -44,6 +44,92 @@ function validationRequest(instanceId) {
   });
 }
 
+function activationRequest(deviceId, instanceName = 'Current Mac') {
+  return new Request('https://worker.test/license/activate', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      key: licenseKey,
+      instance_name: instanceName,
+      device_id: deviceId,
+    }),
+  });
+}
+
+test('repeated activation from one physical device reuses its Creem instance', async (t) => {
+  const current = instance('inst_current', 'Current Mac');
+  const env = makeEnv([]);
+  const originalFetch = globalThis.fetch;
+  t.after(() => { globalThis.fetch = originalFetch; });
+  let activationCalls = 0;
+  let validationCalls = 0;
+
+  globalThis.fetch = async (url) => {
+    if (url.endsWith('/activate')) {
+      activationCalls += 1;
+      return Response.json(license(current, 1));
+    }
+    validationCalls += 1;
+    return Response.json(license(current, 1));
+  };
+
+  const firstResponse = await worker.fetch(
+    activationRequest('a'.repeat(64)), env, {}
+  );
+  const secondResponse = await worker.fetch(
+    activationRequest('a'.repeat(64)), env, {}
+  );
+
+  assert.equal(firstResponse.status, 200);
+  assert.equal(secondResponse.status, 200);
+  assert.equal(activationCalls, 1);
+  assert.equal(validationCalls, 1);
+  assert.equal((await secondResponse.json()).instance.id, current.id);
+});
+
+test('different physical device identifiers create separate Creem instances', async (t) => {
+  const env = makeEnv([]);
+  const originalFetch = globalThis.fetch;
+  t.after(() => { globalThis.fetch = originalFetch; });
+  let activationCalls = 0;
+
+  globalThis.fetch = async (url, options) => {
+    assert.ok(url.endsWith('/activate'));
+    activationCalls += 1;
+    const payload = JSON.parse(options.body);
+    return Response.json(license(instance(`inst_${activationCalls}`, payload.instance_name)));
+  };
+
+  await worker.fetch(activationRequest('a'.repeat(64)), env, {});
+  await worker.fetch(activationRequest('b'.repeat(64), 'Other Mac'), env, {});
+
+  assert.equal(activationCalls, 2);
+});
+
+test('temporary validation failure never consumes a second activation slot', async (t) => {
+  const current = instance('inst_current', 'Current Mac');
+  const env = makeEnv([]);
+  const originalFetch = globalThis.fetch;
+  t.after(() => { globalThis.fetch = originalFetch; });
+  let activationCalls = 0;
+
+  globalThis.fetch = async (url) => {
+    if (url.endsWith('/activate')) {
+      activationCalls += 1;
+      return Response.json(license(current, 1));
+    }
+    return new Response('{"error":"temporary"}', { status: 500 });
+  };
+
+  await worker.fetch(activationRequest('a'.repeat(64)), env, {});
+  const repeatedResponse = await worker.fetch(
+    activationRequest('a'.repeat(64)), env, {}
+  );
+
+  assert.equal(repeatedResponse.status, 500);
+  assert.equal(activationCalls, 1);
+});
+
 test('validation expands the current Creem instance into every tracked device', async (t) => {
   const current = instance('inst_current', 'Current Mac');
   const other = instance('inst_other', 'Other Mac');

@@ -13,6 +13,10 @@ one non-renewable seven-day Pro trial per installation. The macOS app contains n
   eligibility.
 - **许可证密钥不落客户端** — `/license/activate`, `/license/validate`, and
   `/license/deactivate` proxy Creem's License API. Only the Worker reads `CREEM_API_KEY`.
+- **同一台 Mac 重复激活不重复占用名额** — current clients include `device_id`, a SHA-256
+  digest derived locally from `IOPlatformUUID` (the raw hardware UUID never leaves the Mac). The
+  Worker maps that digest to its existing Creem instance and validates/reuses it before attempting
+  a new activation. Older clients that omit `device_id` remain compatible.
 - **允许用户自行解绑** — the app calls the Worker's `/license/deactivate` proxy.
 - **每 72 小时后台验证一次 / 最长离线使用 14 天** — handled entirely client-side in
   `MembershipManager.revalidate()`, no worker involvement needed.
@@ -62,6 +66,12 @@ validated instance ID in KV and expands validation responses by revalidating tho
 client therefore receives an instance array containing every tracked active device while still
 accepting Creem's single-object activation response. A device activated before this tracking was
 introduced is added automatically the next time that device validates its license.
+
+Activation requests from current clients also include a PiPanel-only `device_id`; the Worker never
+forwards this field to Creem. Its KV mapping makes activation idempotent across app reinstall and
+local Keychain deletion. If a mapped instance is definitively gone, the Worker removes the stale
+mapping and permits one fresh activation. Temporary validation failures are returned to the client
+instead of risking a duplicate instance.
 
 ## One-time setup
 
