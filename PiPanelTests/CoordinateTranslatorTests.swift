@@ -847,6 +847,61 @@ final class FlingCandidateMatcherTests: XCTestCase {
     }
 }
 
+final class WindowCandidateTitleTests: XCTestCase {
+    func testVisibleTitlelessWordStartWindowUsesAccessibilityTitle() {
+        XCTAssertEqual(
+            WindowEnumerator.candidateTitle(
+                windowTitle: nil,
+                ownerBundleIdentifier: "com.microsoft.Word",
+                titlelessAccessibilityFallback: "打开新的和最近使用的文件"
+            ),
+            "打开新的和最近使用的文件"
+        )
+    }
+
+    func testWhitespaceOnlyWordStartWindowUsesAccessibilityTitle() {
+        XCTAssertEqual(
+            WindowEnumerator.candidateTitle(
+                windowTitle: "  \n",
+                ownerBundleIdentifier: "com.microsoft.Word",
+                titlelessAccessibilityFallback: "Open New or Recent"
+            ),
+            "Open New or Recent"
+        )
+    }
+
+    func testTitlelessWordWindowWithoutMatchingAccessibilityWindowRemainsExcluded() {
+        XCTAssertNil(
+            WindowEnumerator.candidateTitle(
+                windowTitle: nil,
+                ownerBundleIdentifier: "com.microsoft.Word",
+                titlelessAccessibilityFallback: nil
+            )
+        )
+    }
+
+    func testOtherTitlelessVisibleWindowRemainsExcluded() {
+        XCTAssertNil(
+            WindowEnumerator.candidateTitle(
+                windowTitle: nil,
+                ownerBundleIdentifier: "com.example.app",
+                titlelessAccessibilityFallback: "Example Window"
+            )
+        )
+    }
+
+    func testRealDocumentTitleIsPreserved() {
+        XCTAssertEqual(
+            WindowEnumerator.candidateTitle(
+                windowTitle: "Document 1",
+                ownerBundleIdentifier: "com.microsoft.Word",
+                titlelessAccessibilityFallback: nil
+            ),
+            "Document 1"
+        )
+    }
+}
+
 final class VideoPlaybackDetectionTests: XCTestCase {
     func testBrowserMediaSessionMatchesOnlyItsTitledWindow() {
         var info = NowPlayingInfo()

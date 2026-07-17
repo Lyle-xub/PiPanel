@@ -30,10 +30,25 @@ enum WindowEnumerator {
             guard !isSystemHelperWindow(appName: app.applicationName) else { return nil }
             // Windows with no real title (SCWindow.title empty/nil) are usually hidden/template
             // windows an app keeps around internally, not something a user would recognize or
-            // want to pick from a list — require a real title rather than falling back to the
-            // app's name, which would otherwise make these indistinguishable from the app's
-            // actual document window in the picker.
-            guard let title = window.title, !title.isEmpty else { return nil }
+            // want to pick from a list. Microsoft Word is a verified exception: its visible
+            // "Open New or Recent" start window is a normal AXStandardWindow, but
+            // ScreenCaptureKit publishes it without a title. That made the corner switch appear
+            // over the window and then silently do nothing because this second-stage lookup had
+            // discarded it. For Word only, match the SC frame back to a real, non-minimized AX
+            // window and use that AX title. Requiring that match still rejects Word's hidden
+            // internal/template windows as well as titleless windows from every other app.
+            let accessibilityFallbackTitle = titlelessAccessibilityFallback(
+                windowTitle: window.title,
+                windowFrame: window.frame,
+                ownerPID: app.processID,
+                ownerAppName: app.applicationName,
+                ownerBundleIdentifier: app.bundleIdentifier
+            )
+            guard let title = candidateTitle(
+                windowTitle: window.title,
+                ownerBundleIdentifier: app.bundleIdentifier,
+                titlelessAccessibilityFallback: accessibilityFallbackTitle
+            ) else { return nil }
             return WindowInfo(
                 id: window.windowID,
                 title: title,
@@ -45,6 +60,56 @@ enum WindowEnumerator {
             )
         }
         .sorted { $0.ownerAppName.localizedCaseInsensitiveCompare($1.ownerAppName) == .orderedAscending }
+    }
+
+    private static let titlelessAXWindowBundleIdentifiers: Set<String> = [
+        "com.microsoft.Word",
+    ]
+
+    static func candidateTitle(
+        windowTitle: String?,
+        ownerBundleIdentifier: String?,
+        titlelessAccessibilityFallback: String?
+    ) -> String? {
+        if let windowTitle,
+           !windowTitle.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+            return windowTitle
+        }
+        guard let ownerBundleIdentifier,
+              titlelessAXWindowBundleIdentifiers.contains(ownerBundleIdentifier),
+              let titlelessAccessibilityFallback,
+              !titlelessAccessibilityFallback.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else {
+            return nil
+        }
+        return titlelessAccessibilityFallback
+    }
+
+    private static func titlelessAccessibilityFallback(
+        windowTitle: String?,
+        windowFrame: CGRect,
+        ownerPID: pid_t,
+        ownerAppName: String,
+        ownerBundleIdentifier: String?
+    ) -> String? {
+        if let windowTitle,
+           !windowTitle.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+            return nil
+        }
+        guard let ownerBundleIdentifier,
+              titlelessAXWindowBundleIdentifiers.contains(ownerBundleIdentifier),
+              let axWindow = AXWindowLocator.locate(
+                ownerPID: ownerPID,
+                approximateFrame: windowFrame,
+                title: nil
+              ),
+              !AXWindowLocator.isMinimized(axWindow) else {
+            return nil
+        }
+        if let axTitle = AXWindowLocator.title(of: axWindow),
+           !axTitle.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+            return axTitle
+        }
+        return ownerAppName
     }
 
     private static let helperAppNamePatterns = [
