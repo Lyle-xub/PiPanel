@@ -1,4 +1,5 @@
 import AppKit
+import QuartzCore
 import SwiftUI
 
 /// A borderless window has no titlebar and therefore no traffic-light close/miniaturize/zoom
@@ -16,10 +17,13 @@ private final class WelcomeWindow: NSWindow {
 @MainActor
 final class WelcomeWindowController: NSWindowController {
     static let shared = WelcomeWindowController()
+    private var hasCompacted = false
+
+    private let preferredCompactSize = NSSize(width: 1120, height: 700)
 
     private convenience init() {
         let window = WelcomeWindow(
-            contentRect: NSRect(x: 0, y: 0, width: 460, height: 470),
+            contentRect: NSRect(x: 0, y: 0, width: 1120, height: 700),
             styleMask: [.borderless, .fullSizeContentView],
             backing: .buffered,
             defer: false
@@ -28,8 +32,8 @@ final class WelcomeWindowController: NSWindowController {
         // so the window itself just needs to get out of the way — transparent, shadow-only chrome.
         window.isOpaque = false
         window.backgroundColor = .clear
-        window.hasShadow = true
-        window.isMovableByWindowBackground = true
+        window.hasShadow = false
+        window.isMovableByWindowBackground = false
         window.center()
         self.init(window: window)
     }
@@ -45,9 +49,20 @@ final class WelcomeWindowController: NSWindowController {
     /// state change after it actually reach the screen.
     func show() {
         guard let window else { return }
-        let contentView = WelcomeView { [weak self] in
-            self?.dismiss()
-        }
+        hasCompacted = false
+        let screen = NSScreen.main ?? NSScreen.screens[0]
+        window.setFrame(screen.frame, display: true)
+        window.hasShadow = false
+        window.isMovableByWindowBackground = false
+
+        let contentView = WelcomeView(
+            onRequestCompact: { [weak self] animated in
+                self?.compactWindow(animated: animated)
+            },
+            onContinue: { [weak self] in
+                self?.dismiss()
+            }
+        )
         let hostingView = NSHostingView(rootView: contentView)
         window.contentView = hostingView
         hostingView.layoutSubtreeIfNeeded()
@@ -57,6 +72,45 @@ final class WelcomeWindowController: NSWindowController {
         window.makeKeyAndOrderFront(nil)
         window.contentView?.needsDisplay = true
         window.displayIfNeeded()
+    }
+
+    private func compactWindow(animated: Bool) {
+        guard let window, !hasCompacted else { return }
+        hasCompacted = true
+
+        let screen = window.screen ?? NSScreen.main ?? NSScreen.screens[0]
+        let visibleFrame = screen.visibleFrame
+        let width = min(preferredCompactSize.width, visibleFrame.width - 48)
+        let height = min(preferredCompactSize.height, visibleFrame.height - 48)
+        let targetFrame = NSRect(
+            x: visibleFrame.midX - width / 2,
+            y: visibleFrame.midY - height / 2,
+            width: width,
+            height: height
+        )
+
+        guard animated else {
+            window.setFrame(targetFrame, display: true)
+            finishCompacting(window)
+            return
+        }
+
+        NSAnimationContext.runAnimationGroup { context in
+            context.duration = 1.45
+            context.timingFunction = CAMediaTimingFunction(name: .easeInEaseOut)
+            window.animator().setFrame(targetFrame, display: true)
+        } completionHandler: { [weak self, weak window] in
+            Task { @MainActor in
+                guard let self, let window else { return }
+                self.finishCompacting(window)
+            }
+        }
+    }
+
+    private func finishCompacting(_ window: NSWindow) {
+        window.hasShadow = true
+        window.isMovableByWindowBackground = true
+        window.invalidateShadow()
     }
 
     private func dismiss() {

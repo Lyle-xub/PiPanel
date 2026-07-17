@@ -1,99 +1,39 @@
 import SwiftUI
 
 struct GeneralSettingsView: View {
-    @ObservedObject private var settings = SettingsStore.shared
     @ObservedObject private var launchAtLogin = LaunchAtLoginManager.shared
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 16) {
-            VStack(alignment: .leading, spacing: 4) {
+        Form {
+            Section {
                 Toggle("开机启动", isOn: Binding(
                     get: { launchAtLogin.isEnabled },
                     set: { launchAtLogin.setEnabled($0) }
                 ))
-                .font(.system(size: 12))
-                .toggleStyle(.switch)
 
                 if let error = launchAtLogin.lastError {
                     Text(error)
-                        .font(.system(size: 11))
+                        .font(.caption)
                         .foregroundStyle(.red)
                 }
             }
 
-            Divider()
-
-            VStack(alignment: .leading, spacing: 6) {
-                HStack {
-                    Text("画面帧率")
-                        .font(.system(size: 12, weight: .semibold))
-                    Spacer()
-                    Text("\(settings.targetFPS) fps")
-                        .font(.system(size: 12))
-                        .foregroundStyle(.secondary)
-                }
-                Slider(value: Binding(
-                    get: { Double(settings.targetFPS) },
-                    set: { settings.targetFPS = Int($0) }
-                ), in: 5...30, step: 1)
-                Text("更低帧率更省电，更高帧率更流畅")
-                    .font(.system(size: 11))
+            Section("启动画中画") {
+                Label("将鼠标移到窗口右上角，点击出现的画中画按钮", systemImage: "pip.enter")
+                Text("开源免费版固定使用右上角悬停按钮，最多同时打开一个画中画。")
+                    .font(.caption)
                     .foregroundStyle(.secondary)
             }
 
-            Divider()
-
-            VStack(alignment: .leading, spacing: 10) {
-                Toggle("源软件被激活时自动隐藏画中画", isOn: $settings.autoHideWhenSourceActive)
-                    .font(.system(size: 12))
-                Toggle("点击/输入后自动归还键盘焦点", isOn: $settings.autoReturnEnabled)
-                    .font(.system(size: 12))
-
-                if settings.autoReturnEnabled {
-                    VStack(alignment: .leading, spacing: 4) {
-                        HStack {
-                            Text("归还延迟")
-                                .font(.system(size: 12))
-                            Spacer()
-                            Text("\(settings.autoReturnIdleInterval, specifier: "%.1f")s")
-                                .font(.system(size: 12))
-                                .foregroundStyle(.secondary)
-                        }
-                        Slider(value: $settings.autoReturnIdleInterval, in: 0.5...5, step: 0.5)
-                    }
-                    .padding(.leading, 4)
-                }
-            }
-            .toggleStyle(.switch)
-
-            Divider()
-
-            VStack(alignment: .leading, spacing: 6) {
-                HStack {
-                    Text("默认画中画宽度")
-                        .font(.system(size: 12, weight: .semibold))
-                    Spacer()
-                    Text("\(Int(settings.defaultPanelWidth)) pt")
-                        .font(.system(size: 12))
-                        .foregroundStyle(.secondary)
-                }
-                Slider(value: $settings.defaultPanelWidth, in: 240...600, step: 10)
-                Text("仅影响新建的画中画，不会改变已打开的窗口")
-                    .font(.system(size: 11))
+            Section("默认行为") {
+                LabeledContent("画面帧率", value: "15 fps")
+                LabeledContent("画面清晰度", value: "960 px")
+                LabeledContent("关闭方式", value: "左上角关闭按钮")
+                Text("这些默认值优先降低资源消耗，并保留窗口裁切、坐标校准、全屏悬浮和退出恢复等核心能力。")
+                    .font(.caption)
                     .foregroundStyle(.secondary)
-            }
-
-            VStack(alignment: .leading, spacing: 6) {
-                Text("默认堆叠角落")
-                    .font(.system(size: 12, weight: .semibold))
-                Picker("", selection: $settings.defaultStackingCorner) {
-                    ForEach(PanelCorner.allCases) { corner in
-                        Text(corner.displayName).tag(corner)
-                    }
-                }
-                .pickerStyle(.segmented)
-                .labelsHidden()
             }
         }
+        .settingsPageFormStyle()
     }
 }

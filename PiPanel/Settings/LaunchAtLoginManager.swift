@@ -46,4 +46,5 @@ final class LaunchAtLoginManager: ObservableObject {
         // the toggle showing a state that didn't actually take effect.
         refresh()
     }
+
 }

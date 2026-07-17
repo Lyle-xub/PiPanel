@@ -18,13 +18,24 @@ final class SettingsWindowController: NSWindowController, NSWindowDelegate {
 
     private convenience init() {
         let window = NSWindow(
-            contentRect: NSRect(x: 0, y: 0, width: 560, height: 420),
-            styleMask: [.titled, .closable, .miniaturizable, .resizable],
+            contentRect: NSRect(x: 0, y: 0, width: 680, height: 520),
+            // .fullSizeContentView lets SettingsRootView's NavigationSplitView draw all the way up
+            // under the traffic lights instead of stopping below a reserved titlebar strip —
+            // combined with titlebarAppearsTransparent/titleVisibility below, this is the same
+            // recipe System Settings.app itself uses for its own sidebar-to-the-top look. .titled
+            // is kept (not dropped) specifically *because* it's what supplies the native traffic
+            // lights and window-drag area at all — only the title *text* is hidden, not the bar.
+            styleMask: [.titled, .closable, .miniaturizable, .resizable, .fullSizeContentView],
             backing: .buffered,
             defer: false
         )
+        // Title text is still set (just not shown) — VoiceOver and Mission Control/Cmd-` still
+        // read a window's .title even when titleVisibility hides it from sighted users.
         window.title = "PiPanel 设置"
-        window.minSize = NSSize(width: 480, height: 360)
+        window.titlebarAppearsTransparent = true
+        window.titleVisibility = .hidden
+        window.minSize = NSSize(width: 600, height: 440)
+        window.backgroundColor = .windowBackgroundColor
         window.isReleasedWhenClosed = false
         window.center()
         self.init(window: window)

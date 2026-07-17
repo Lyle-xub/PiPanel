@@ -1,6 +1,7 @@
 import AppKit
 import CoreMedia
 
+@MainActor
 protocol PiPPanelControllerDelegate: AnyObject {
     func pipPanelControllerDidRequestClose(_ controller: PiPPanelController)
 }
@@ -17,6 +18,11 @@ private final class InteractivePiPPanel: NSPanel {
 @MainActor
 final class PiPPanelController: NSObject {
     weak var delegate: PiPPanelControllerDelegate?
+    /// Keeps capture cadence aligned with the screen that actually presents this panel. A PiP may
+    /// be dragged from a 120/144 Hz display onto a 60 Hz display (or the reverse) after creation.
+    var onPresentationDisplayMaximumFPSChanged: ((Int) -> Void)? {
+        didSet { reportPresentationDisplayMaximumFPSIfNeeded(force: true) }
+    }
     /// Setting this wires it up with the geometry (panel/videoView) it needs for cursor-capture
     /// coordinate math — see InteractionForwarder.attach(videoView:panel:) — and subscribes to
     /// CaptureSession discovering the source app's real minimum/maximum size (see
@@ -24,6 +30,9 @@ final class PiPPanelController: NSObject {
     var interactionForwarder: InteractionForwarder? {
         didSet {
             interactionForwarder?.attach(videoView: videoView, panel: panel)
+            interactionForwarder?.onCaptureEnded = { [weak self] in
+                self?.videoView.resetToMoveMode()
+            }
             interactionForwarder?.captureSession?.onSourceMinSizeDiscovered = { [weak self] discoveredSize in
                 guard let self else { return }
                 self.discoveredSourceMinSize = discoveredSize
@@ -34,19 +43,45 @@ final class PiPPanelController: NSObject {
                 self.discoveredSourceMaxSize = discoveredSize
                 self.updateContentScalingMode()
             }
+            interactionForwarder?.captureSession?.onDeliverableSizeChanged = { [weak self] in
+                self?.refreshPanelMaxSize()
+            }
         }
     }
 
     let panel: NSPanel
     let videoView: PiPVideoLayerView
+    /// Set only by PiPVideoLayerView receiving a real drag. Do not derive this from panel.frame:
+    /// registering a CGVirtualDisplay can make WindowServer relocate an untouched NSPanel.
+    private(set) var hasUserAdjustedFrameSinceCreation = false
     /// The source app's own minimum size, once CaptureSession has discovered it by having a
     /// shrink request rejected — nil until then, meaning "unknown, so keep trying to resize the
     /// source for now." See updateContentScalingMode's doc comment for how this is used.
     private var discoveredSourceMinSize: CGSize?
     /// The mirror image, for a growth request rejected — nil until then, same "unknown" meaning.
     private var discoveredSourceMaxSize: CGSize?
+    /// True while this panel is hidden because its source app is frontmost. updateOpacity
+    /// checks this before touching alpha, so a live SettingsStore.panelOpacity change never
+    /// un-hides a panel that's currently supposed to be hidden — it just takes effect the next
+    /// time this panel actually becomes visible again.
+    private var isCurrentlyHidden = false
+    /// The source window's own bundle identifier, used to filter NowPlayingMonitor updates down
+    /// to just the ones that actually belong to this session's own app.
+    private let sourceBundleIdentifier: String?
+    private let sourceWindowTitle: String
+    private let isMusicApp: Bool
+    private let isVideoApp: Bool
+    /// Keeps the playback bar's icon/availability current for both music and video sessions.
+    /// Registered once at init so the state is already correct the instant hover reveals it.
+    private var playbackControlsObserverId: UUID?
+    private var hasMatchingVideoPlayback = false
+    private var lastReportedPresentationDisplayMaximumFPS: Int?
 
-    init(initialFrame: NSRect, nativeSize: CGSize) {
+    init(initialFrame: NSRect, nativeSize: CGSize, windowTitle: String, sourceBundleIdentifier: String?) {
+        self.sourceBundleIdentifier = sourceBundleIdentifier
+        self.sourceWindowTitle = windowTitle
+        self.isMusicApp = WindowEnumerator.isKnownMusicApp(bundleIdentifier: sourceBundleIdentifier)
+        self.isVideoApp = WindowEnumerator.isKnownVideoApp(bundleIdentifier: sourceBundleIdentifier)
         // No .resizable here — PiPVideoLayerView implements the entire drag-to-resize gesture
         // itself (edge detection, live tracking, min/maxSize clamping) via window.setFrame calls
         // that don't need it. Diagnostic logging (traced via a live session) found .resizable
@@ -69,6 +104,7 @@ final class PiPPanelController: NSObject {
 
         super.init()
 
+        panel.delegate = self
         panel.isFloatingPanel = true
         panel.hidesOnDeactivate = false
         panel.isOpaque = false
@@ -93,9 +129,10 @@ final class PiPPanelController: NSObject {
         // creation time, so there's nothing more specific to go on. It gets corrected downward
         // once the display's real (possibly smaller — see CaptureSession.deliverableMaxSize's doc
         // comment) live bounds are known; see didResizeTo below.
+        let virtualDisplaySize = VirtualDisplayHost.pixelSize(forLongEdge: CGFloat(SettingsStore.shared.virtualDisplayLongEdge))
         panel.maxSize = NSSize(
-            width: CGFloat(VirtualDisplayHost.maxPixelsWide) - CaptureSession.edgeMargin * 2,
-            height: CGFloat(VirtualDisplayHost.maxPixelsHigh) - VirtualDisplayHost.menuBarInset - CaptureSession.edgeMargin
+            width: CGFloat(virtualDisplaySize.width) - CaptureSession.edgeMargin * 2,
+            height: CGFloat(virtualDisplaySize.height) - VirtualDisplayHost.menuBarInset - CaptureSession.edgeMargin
         )
         // Needed for PiPVideoLayerView.mouseMoved to fire at all — that's what detects a plain
         // hover and hands it to cursor capture.
@@ -103,7 +140,28 @@ final class PiPPanelController: NSObject {
 
         videoView.autoresizingMask = [.width, .height]
         videoView.interactionDelegate = self
+        videoView.titleText = windowTitle
+        videoView.isMusicApp = isMusicApp
+        videoView.isVideoApp = isVideoApp
         panel.contentView = videoView
+
+        if isMusicApp || isVideoApp {
+            playbackControlsObserverId = NowPlayingMonitor.shared.addObserver { [weak self] info in
+                guard let self else { return }
+                if self.isMusicApp {
+                    let playing = info?.bundleIdentifier == self.sourceBundleIdentifier ? (info?.playing ?? false) : false
+                    self.videoView.musicControlsBar.setPlaying(playing)
+                } else {
+                    let matches = WindowEnumerator.videoPlaybackMatches(
+                        info,
+                        sourceBundleIdentifier: self.sourceBundleIdentifier,
+                        windowTitle: self.sourceWindowTitle
+                    )
+                    self.hasMatchingVideoPlayback = matches
+                    self.videoView.setVideoPlaybackAvailable(matches, playing: info?.playing ?? false)
+                }
+            }
+        }
 
         animateEntrance(to: initialFrame)
     }
@@ -129,25 +187,23 @@ final class PiPPanelController: NSObject {
             context.duration = 0.32
             context.timingFunction = CAMediaTimingFunction(name: .easeOut)
             panel.animator().setFrame(finalFrame, display: true)
-            panel.animator().alphaValue = 1
+            panel.animator().alphaValue = CGFloat(SettingsStore.shared.panelOpacity)
         }, completionHandler: { [weak self] in
             self?.videoView.playAppearRipple()
         })
     }
 
-    /// Shrinks and fades the panel out before actually closing it — instant removal (the old
-    /// behavior) felt abrupt for something the user just deliberately dragged into a close zone
-    /// or dismissed from the menu; this mirrors the shrink-in entrance from a flung-window open.
+    /// Instant removal, deliberately — a shrink-toward-the-circle animation was tried for the
+    /// dropped-onto-CloseDropZoneOverlay case specifically (converging the panel into the circle's
+    /// center rather than just vanishing), but it still read as an unwanted extra flourish stacked
+    /// on top of the drag gesture that triggered it. Both the panel and the close target now leave
+    /// immediately, in that order, as soon as the drop is confirmed.
     func close() {
-        NSAnimationContext.runAnimationGroup({ context in
-            context.duration = 0.18
-            context.timingFunction = CAMediaTimingFunction(name: .easeIn)
-            panel.animator().alphaValue = 0
-            let frame = panel.frame
-            panel.animator().setFrame(frame.insetBy(dx: frame.width * 0.08, dy: frame.height * 0.08), display: true)
-        }, completionHandler: { [weak self] in
-            self?.panel.orderOut(nil)
-        })
+        if let playbackControlsObserverId {
+            NowPlayingMonitor.shared.removeObserver(playbackControlsObserverId)
+        }
+        playbackControlsObserverId = nil
+        panel.orderOut(nil)
     }
 
     /// Fades the panel in/out — used when the source app becomes frontmost (M3): showing a
@@ -155,11 +211,14 @@ final class PiPPanelController: NSObject {
     /// hides itself until they switch away again. ignoresMouseEvents keeps a hidden (alpha 0)
     /// panel from swallowing clicks meant for whatever's actually behind it.
     func setLive(_ live: Bool, animated: Bool = true) {
+        debugTrace("live: setLive(\(live)) called, panel currently alphaValue=\(panel.alphaValue) frame=\(panel.frame)")
+        isCurrentlyHidden = !live
         panel.ignoresMouseEvents = !live
         if live { panel.orderFrontRegardless() }
-        let applyAlpha = { self.panel.animator().alphaValue = live ? 1 : 0 }
+        let targetAlpha = live ? CGFloat(SettingsStore.shared.panelOpacity) : 0
+        let applyAlpha = { self.panel.animator().alphaValue = targetAlpha }
         guard animated else {
-            panel.alphaValue = live ? 1 : 0
+            panel.alphaValue = targetAlpha
             return
         }
         NSAnimationContext.runAnimationGroup { context in
@@ -170,6 +229,24 @@ final class PiPPanelController: NSObject {
 
     func enqueue(_ sampleBuffer: CMSampleBuffer, nativeSize: CGSize) {
         videoView.enqueue(sampleBuffer, nativeSize: nativeSize)
+    }
+
+    private func reportPresentationDisplayMaximumFPSIfNeeded(force: Bool = false) {
+        let screen = panel.screen
+            ?? NSScreen.screens.first(where: { $0.frame.intersects(panel.frame) })
+            ?? NSScreen.main
+        let fps = DisplayRefreshRate.fps(for: screen)
+        guard force || fps != lastReportedPresentationDisplayMaximumFPS else { return }
+        lastReportedPresentationDisplayMaximumFPS = fps
+        onPresentationDisplayMaximumFPSChanged?(fps)
+    }
+
+    /// SettingsStore.panelOpacity changed live (PiPSessionManager.observeLiveSettings) — applies
+    /// immediately to a panel that's currently visible; a panel currently hidden (isCurrentlyHidden)
+    /// stays at alpha 0 regardless, and picks up the new value when it becomes visible again.
+    func updateOpacity() {
+        guard !isCurrentlyHidden else { return }
+        panel.animator().alphaValue = CGFloat(SettingsStore.shared.panelOpacity)
     }
 
     /// Deliberately a *different* condition than applyPanelResize's own both-dimensions check for
@@ -187,13 +264,76 @@ final class PiPPanelController: NSObject {
     /// crop-free. Called both when a bound is first discovered and on every subsequent resize tick,
     /// so crossing back and forth over any threshold mid-drag switches modes live.
     private func updateContentScalingMode() {
-        guard discoveredSourceMinSize != nil || discoveredSourceMaxSize != nil else { return }
-        let size = panel.frame.size
+        // discoveredSourceMinSize/MaxSize are in the source window's own point-space, not the
+        // panel's — CaptureSession.panelToSourceScale converts panel.frame.size (the panel starts
+        // life at a fixed default thumbnail width, entirely decoupled from however big the real
+        // source window is — see resizeSourceWindow's doc comment) onto that same footing before
+        // comparing. Falls back to 1:1 if no resize has happened yet to establish the scale.
+        let scale = interactionForwarder?.captureSession?.panelToSourceScale ?? 1
+        let size = CGSize(width: panel.frame.width * scale, height: panel.frame.height * scale)
         let floor = discoveredSourceMinSize ?? .zero
-        let ceiling = discoveredSourceMaxSize ?? CGSize(width: CGFloat.infinity, height: CGFloat.infinity)
+        // The ceiling isn't just whatever the source app itself refuses to grow past
+        // (discoveredSourceMaxSize) — the virtual display backing the whole session has its own
+        // hard capacity too (CaptureSession.deliverableMaxSize), and CaptureSession.
+        // clampToDeliverableSize already silently pins the *real* source window there once a
+        // resize request would exceed it, same as an app-level ceiling would. Folding it into the
+        // same comparison here means the panel is free to keep growing well past that point
+        // (nothing artificially caps panel.maxSize to match anymore — see didResizeTo) while the
+        // mirror correctly drops into letterboxed .fit instead of continuing to crop-fill with a
+        // source that's actually stopped growing, the same way it already does for an app's own
+        // discovered ceiling.
+        let deliverableCeiling = interactionForwarder?.captureSession?.deliverableMaxSize ?? CGSize(width: CGFloat.infinity, height: CGFloat.infinity)
+        let appCeiling = discoveredSourceMaxSize ?? CGSize(width: CGFloat.infinity, height: CGFloat.infinity)
+        let ceiling = CGSize(width: min(appCeiling.width, deliverableCeiling.width), height: min(appCeiling.height, deliverableCeiling.height))
         let isBelowFloor = size.width < floor.width || size.height < floor.height
         let isAboveCeiling = size.width > ceiling.width || size.height > ceiling.height
         videoView.setContentScalingMode((isBelowFloor || isAboveCeiling) ? .fit : .fill)
+    }
+
+    /// Called when CaptureSession.onDeliverableSizeChanged fires — a live virtualDisplayLongEdge
+    /// resize (SettingsStore's "虚拟显示器分辨率" slider, applied to an already-open session) just
+    /// succeeded. Unlike didResizeTo's own maxSize update (which only ever tightens it via `min`,
+    /// since an app-imposed ceiling can't un-discover itself), this sets panel.maxSize straight to
+    /// the new deliverableMaxSize: the virtual display's own capacity is the one ceiling that can
+    /// legitimately go back up, and nothing else will ever raise panel.maxSize back to match if
+    /// this doesn't.
+    private func refreshPanelMaxSize() {
+        guard let captureSession = interactionForwarder?.captureSession,
+              let deliverableMax = captureSession.deliverableMaxSize else { return }
+        panel.maxSize = NSSize(width: deliverableMax.width, height: deliverableMax.height)
+
+        // NSWindow.maxSize only constrains future interactive resize operations; lowering it does
+        // not pull an already-larger panel back inside the new limit. Apply that correction now,
+        // preserving the panel's aspect ratio and top-left anchor so a live settings change feels
+        // stable instead of making the window jump across the screen.
+        let currentFrame = panel.frame
+        if currentFrame.width > deliverableMax.width || currentFrame.height > deliverableMax.height {
+            let scale = min(
+                deliverableMax.width / max(currentFrame.width, 1),
+                deliverableMax.height / max(currentFrame.height, 1)
+            )
+            let newSize = CGSize(width: currentFrame.width * scale, height: currentFrame.height * scale)
+            let resizedFrame = CGRect(
+                x: currentFrame.minX,
+                y: currentFrame.maxY - newSize.height,
+                width: newSize.width,
+                height: newSize.height
+            )
+            panel.setFrame(resizedFrame, display: true)
+        }
+
+        // Re-run the normal panel→source resize pipeline even if the panel itself did not need to
+        // shrink. The source window may still be larger than a newly-reduced virtual workspace;
+        // this clamps it to the new capacity and refreshes the crop instead of leaving stale or
+        // partially-outside content visible until the user next drags an edge.
+        updateContentScalingMode()
+        captureSession.resizeSourceWindow(to: panel.frame.size)
+    }
+}
+
+extension PiPPanelController: NSWindowDelegate {
+    func windowDidChangeScreen(_ notification: Notification) {
+        reportPresentationDisplayMaximumFPSIfNeeded()
     }
 }
 
@@ -206,15 +346,29 @@ extension PiPPanelController: PiPVideoLayerViewDelegate {
         interactionForwarder?.forwardKeyEvent(event)
     }
 
+    func videoViewDidBeginUserGeometryChange(_ view: PiPVideoLayerView) {
+        hasUserAdjustedFrameSinceCreation = true
+    }
+
     func videoView(_ view: PiPVideoLayerView, didResizeTo size: CGSize) {
         debugTrace("grow: didResizeTo panelSize=\(size)")
         // Corrects the aspirational maxSize set at panel-creation time down to whatever the
         // virtual display's real live bounds can actually deliver, once known — see
         // CaptureSession.deliverableMaxSize's doc comment for why this can be smaller than
-        // expected. Only ever tightens (min), since a legitimately-behaving virtual display can't
-        // exceed what was requested, and re-checking every tick means this takes effect live,
-        // mid-drag, the moment the real bounds become known, same as the app-level floor/ceiling
-        // corrections above.
+        // expected. This is deliberately applied *unscaled*, straight in the panel's own
+        // point-space, as just a generous ceiling on how big the floating panel window itself can
+        // be dragged — not an attempt to keep the panel capped at exactly what the mirrored source
+        // can currently follow it to (those are no longer the same space once
+        // CaptureSession.panelToSourceScale is anything other than 1:1). Dividing this by that
+        // scale was tried and reverted: it choked the panel down to a tiny fraction of
+        // deliverableMax (e.g. ~380x230 out of a 1200x716 budget, for a source that started out
+        // ~3x bigger than the default thumbnail panel), and there was no need for it — once the
+        // panel's scaled-up equivalent actually outgrows what the source can be resized to,
+        // updateContentScalingMode already switches the mirror to letterboxed .fit on its own, so
+        // the panel stays freely draggable and the picture just increasingly pillarboxes instead.
+        // Only ever tightens (min), since a legitimately-behaving virtual display can't exceed
+        // what was requested, and re-checking every tick means this takes effect live, mid-drag,
+        // the moment the real bounds become known.
         if let deliverableMax = interactionForwarder?.captureSession?.deliverableMaxSize {
             panel.maxSize = NSSize(
                 width: min(panel.maxSize.width, deliverableMax.width),
@@ -227,5 +381,23 @@ extension PiPPanelController: PiPVideoLayerViewDelegate {
 
     func videoViewDidRequestCloseByDragging(_ view: PiPVideoLayerView) {
         delegate?.pipPanelControllerDidRequestClose(self)
+    }
+
+    func videoViewDidRequestClose(_ view: PiPVideoLayerView) {
+        delegate?.pipPanelControllerDidRequestClose(self)
+    }
+
+    func videoView(_ view: PiPVideoLayerView, didRequestMusicCommand command: PiPMusicControlsBar.Command) {
+        guard isMusicApp || (isVideoApp && hasMatchingVideoPlayback) else { return }
+        if isVideoApp {
+            guard case .togglePlayPause = command else { return }
+        }
+        let mrCommand: NowPlayingMonitor.Command
+        switch command {
+        case .previous: mrCommand = .previousTrack
+        case .togglePlayPause: mrCommand = .togglePlayPause
+        case .next: mrCommand = .nextTrack
+        }
+        NowPlayingMonitor.shared.send(mrCommand)
     }
 }

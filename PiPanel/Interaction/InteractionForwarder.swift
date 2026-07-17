@@ -27,6 +27,17 @@ final class InteractionForwarder {
 
     var autoReturnEnabled = false
     var autoReturnIdleInterval: TimeInterval = 1.5
+    /// Fires (main actor) every time capture actually ends, however it ends — crossing back out
+    /// through the mirrored window's edge, or Option appearing mid-capture. PiPPanelController
+    /// uses this to reset PiPVideoLayerView's control-mode gate back to "move mode" (see that
+    /// type's own doc comment) each time, rather than hasEnteredControlMode staying permanently
+    /// latched after the first double-click for the rest of the session — the first version of
+    /// that gate did exactly that, and it meant Option was needed to move the panel forever after
+    /// one double-click, since a plain hover always re-captures once hasEnteredControlMode is
+    /// true, and hovering unavoidably happens before a plain mouseDown ever could. Resetting here
+    /// means the panel goes back to being freely draggable the moment you're done controlling the
+    /// source, and only needs another double-click to hand control back to it again.
+    var onCaptureEnded: (() -> Void)?
 
     private var previousFrontmostApp: NSRunningApplication?
     private var idleReturnTimer: Timer?
@@ -52,15 +63,16 @@ final class InteractionForwarder {
     // MARK: - Cursor capture
 
     func beginCaptureIfNeeded(atLocalPoint localPoint: CGPoint) {
-        guard !isCaptured, let videoView, let windowFrame = captureSession?.currentSourceWindowFrame() else { return }
+        guard !isCaptured, let captureSession, let videoView,
+              let capturedContentFrame = captureSession.currentCapturedContentFrame() else { return }
         let displayedRect = videoView.displayedVideoRect(nativeSize: videoView.nativeSize)
         guard let virtualPoint = CoordinateTranslator.globalPoint(
             forLocalPoint: localPoint,
             viewBounds: videoView.bounds,
             nativeSize: videoView.nativeSize,
             displayedVideoRect: displayedRect,
-            windowGlobalFrame: windowFrame
-        ) else { return }
+            windowGlobalFrame: capturedContentFrame
+        ), captureSession.canForwardInteraction(at: virtualPoint) else { return }
 
         isCaptured = true
         CGWarpMouseCursorPosition(virtualPoint)
@@ -88,12 +100,12 @@ final class InteractionForwarder {
     /// local coordinates — both to update the visible indicator, and, if that position has moved
     /// past the mirrored window's edge, to hand control back to the real screen.
     private func handleCapturedMouseMoved() {
-        guard isCaptured, let windowFrame = captureSession?.currentSourceWindowFrame(),
-              windowFrame.width > 0, windowFrame.height > 0,
+        guard isCaptured, let capturedContentFrame = captureSession?.currentCapturedContentFrame(),
+              capturedContentFrame.width > 0, capturedContentFrame.height > 0,
               let current = CGEvent(source: nil)?.location else { return }
 
-        let fracX = (current.x - windowFrame.minX) / windowFrame.width
-        let fracYFromTop = (current.y - windowFrame.minY) / windowFrame.height
+        let fracX = (current.x - capturedContentFrame.minX) / capturedContentFrame.width
+        let fracYFromTop = (current.y - capturedContentFrame.minY) / capturedContentFrame.height
 
         guard fracX < 0 || fracX > 1 || fracYFromTop < 0 || fracYFromTop > 1 else {
             updateCapturedCursorIndicator(fracX: fracX, fracYFromTop: fracYFromTop, clamped: false)
@@ -120,6 +132,7 @@ final class InteractionForwarder {
         isCaptured = false
         removeCaptureMonitors()
         videoView?.hideCapturedCursorIndicator()
+        onCaptureEnded?()
     }
 
     /// Maps the fractional position where the pointer crossed the mirrored window's edge back to
@@ -130,6 +143,7 @@ final class InteractionForwarder {
     private func endCapture(exitFracX: CGFloat, exitFracYFromTop: CGFloat) {
         isCaptured = false
         removeCaptureMonitors()
+        onCaptureEnded?()
 
         guard let videoView, let panel else { return }
         videoView.hideCapturedCursorIndicator()
@@ -153,7 +167,7 @@ final class InteractionForwarder {
         let windowPoint = videoView.convert(localPoint, to: nil)
         let screenPoint = panel.convertPoint(toScreen: windowPoint)
         // AppKit screen space (bottom-left origin) -> Quartz space (top-left origin), the same
-        // conversion used elsewhere (WindowFlingDetector) for CGWarpMouseCursorPosition.
+        // conversion used elsewhere for CGWarpMouseCursorPosition.
         let primaryHeight = NSScreen.screens.first?.frame.height ?? 0
         let quartzPoint = CGPoint(x: screenPoint.x, y: primaryHeight - screenPoint.y)
         CGWarpMouseCursorPosition(quartzPoint)
