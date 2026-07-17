@@ -41,22 +41,27 @@ scheme were checked directly against docs.creem.io (`/features/addons/licenses`,
 - Webhook signing: `creem-signature` header, HMAC-SHA256 hex digest over the raw body, using the
   webhook secret from the Creem dashboard's Developers → Webhooks page.
 
-Two things remain genuinely unconfirmed — Creem's own docs disagree with themselves or don't show
-a populated example — and are handled defensively in code rather than guessed at:
+One purchase-delivery detail remains genuinely unconfirmed because Creem doesn't show a populated
+example, so it is handled defensively in code rather than guessed at:
 
-1. **Whether the license key arrives directly on the `checkout.completed` payload.**
+**Whether the license key arrives directly on the `checkout.completed` payload.**
    `license_keys` is documented as a field on the Checkout entity schema, but the one example
    webhook payload in the docs didn't show it populated. `resolveLicenseKey()` in `src/index.js`
    tries `object.license_keys[0].key` first, and falls back to a `GET /v1/checkouts/{id}` call if
    that's empty. **That fallback endpoint's existence is inferred by REST convention from the
    confirmed `POST /v1/checkouts`, not independently confirmed** — verify with one real purchase.
-2. **Whether `instance` in a license response is always an array or sometimes a single nullable
-   object** (one doc page shows each, for the same endpoint) — `CreemClient.swift` decodes either
-   shape defensively, no worker-side impact.
 
-The easiest way to close both gaps: trigger one real test-mode purchase (see the `CREEM_API_BASE_URL`
+The easiest way to close this gap: trigger one real test-mode purchase (see the `CREEM_API_BASE_URL`
 toggle in `wrangler.toml`), inspect the actual webhook payload Cloudflare logs, and confirm whether
 `resolveLicenseKey()` ever needs the fallback GET or if the inline path always works.
+
+Creem's current activate/validate endpoints return one `instance` object: the instance involved in
+that request. The numeric `activation` field is the total number of active instances. Because Creem
+does not expose a list-instances endpoint, the Worker records every successfully activated or
+validated instance ID in KV and expands validation responses by revalidating those IDs. The macOS
+client therefore receives an instance array containing every tracked active device while still
+accepting Creem's single-object activation response. A device activated before this tracking was
+introduced is added automatically the next time that device validates its license.
 
 ## One-time setup
 

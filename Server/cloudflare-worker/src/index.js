@@ -287,8 +287,7 @@ async function handleCreemRefund(event, env) {
     return;
   }
 
-  const raw = await env.PIPANEL_LICENSES.get(`instances:${licenseKey}`);
-  const instanceIds = raw ? JSON.parse(raw) : [];
+  const instanceIds = await readLicenseInstanceIds(env, licenseKey);
   for (const instanceId of instanceIds) {
     await deactivateCreemInstance(env, licenseKey, instanceId);
   }
@@ -413,7 +412,7 @@ async function handleLicenseAction(request, env, action) {
     },
     body: JSON.stringify(payload),
   });
-  const responseText = await response.text();
+  let responseText = await response.text();
 
   if (response.ok) {
     const license = parseJson(responseText);
@@ -422,6 +421,21 @@ async function handleLicenseAction(request, env, action) {
       const activated = instances.find((instance) => instance?.name === payload.instance_name)
         ?? instances.at(-1);
       if (activated?.id) await rememberLicenseInstance(env, payload.key, activated.id);
+    } else if (action === 'validate') {
+      // Creem returns only the instance named by instance_id even though `activation` is the
+      // total number of active instances. Expand the validated response with every other instance
+      // PiPanel has registered for this license so the count and device rows describe one snapshot.
+      await rememberLicenseInstance(env, payload.key, payload.instance_id);
+      const instances = await loadLicenseInstances(
+        env,
+        payload.key,
+        payload.instance_id,
+        license
+      );
+      if (license && instances.length > 0) {
+        license.instance = instances;
+        responseText = JSON.stringify(license);
+      }
     } else if (action === 'deactivate') {
       await forgetLicenseInstance(env, payload.key, payload.instance_id);
     }
@@ -448,10 +462,79 @@ function normalizeInstances(value) {
   return value && typeof value === 'object' ? [value] : [];
 }
 
+async function loadLicenseInstances(env, licenseKey, currentInstanceId, currentLicense) {
+  const currentInstances = normalizeInstances(currentLicense?.instance);
+  const currentInstance = currentInstances.find((instance) => instance?.id === currentInstanceId)
+    ?? currentInstances[0];
+  const trackedIds = await readLicenseInstanceIds(env, licenseKey);
+  const instanceIds = [...new Set([currentInstanceId, ...trackedIds])];
+  const instances = [];
+  const staleIds = [];
+
+  for (const instanceId of instanceIds) {
+    if (currentInstance?.id === instanceId) {
+      instances.push(currentInstance);
+      continue;
+    }
+
+    let response;
+    try {
+      response = await fetch(`${creemApiBase(env)}/v1/licenses/validate`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Accept': 'application/json',
+          'x-api-key': env.CREEM_API_KEY,
+        },
+        body: JSON.stringify({ key: licenseKey, instance_id: instanceId }),
+      });
+    } catch (error) {
+      // A temporary network failure must not erase a device that can reappear on the next refresh.
+      console.error('Creem instance lookup failed', instanceId, error);
+      continue;
+    }
+
+    if (!response.ok) {
+      // These statuses definitively identify a dead instance. Keep rate-limited/server-error IDs
+      // so a later refresh can recover them.
+      if ([404, 409, 410].includes(response.status)) staleIds.push(instanceId);
+      continue;
+    }
+
+    const license = parseJson(await response.text());
+    const matchingInstances = normalizeInstances(license?.instance);
+    const instance = matchingInstances.find((candidate) => candidate?.id === instanceId)
+      ?? matchingInstances[0];
+    if (instance?.id) instances.push(instance);
+  }
+
+  for (const staleId of staleIds) {
+    await forgetLicenseInstance(env, licenseKey, staleId);
+  }
+
+  // A malformed upstream response should never create duplicate SwiftUI rows.
+  return [...new Map(instances.map((instance) => [instance.id, instance])).values()];
+}
+
+function parseStoredInstanceIds(raw) {
+  if (!raw) return [];
+  try {
+    const value = JSON.parse(raw);
+    if (!Array.isArray(value)) return [];
+    return [...new Set(value.filter((item) => typeof item === 'string' && item.length > 0))];
+  } catch {
+    return [];
+  }
+}
+
+async function readLicenseInstanceIds(env, licenseKey) {
+  const raw = await env.PIPANEL_LICENSES.get(`instances:${licenseKey}`);
+  return parseStoredInstanceIds(raw);
+}
+
 async function rememberLicenseInstance(env, licenseKey, instanceId) {
   const storageKey = `instances:${licenseKey}`;
-  const raw = await env.PIPANEL_LICENSES.get(storageKey);
-  const instanceIds = raw ? JSON.parse(raw) : [];
+  const instanceIds = await readLicenseInstanceIds(env, licenseKey);
   if (!instanceIds.includes(instanceId)) {
     instanceIds.push(instanceId);
     await env.PIPANEL_LICENSES.put(storageKey, JSON.stringify(instanceIds));
@@ -460,9 +543,8 @@ async function rememberLicenseInstance(env, licenseKey, instanceId) {
 
 async function forgetLicenseInstance(env, licenseKey, instanceId) {
   const storageKey = `instances:${licenseKey}`;
-  const raw = await env.PIPANEL_LICENSES.get(storageKey);
-  if (!raw) return;
-  const instanceIds = JSON.parse(raw).filter((id) => id !== instanceId);
+  const instanceIds = (await readLicenseInstanceIds(env, licenseKey))
+    .filter((id) => id !== instanceId);
   if (instanceIds.length === 0) {
     await env.PIPANEL_LICENSES.delete(storageKey);
   } else {

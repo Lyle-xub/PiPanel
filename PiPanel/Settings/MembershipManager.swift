@@ -147,8 +147,8 @@ final class MembershipManager: ObservableObject {
             // device management and lets us identify the exact instance Creem just created.
             let instanceName = deviceActivationName
             let response = try await CreemClient.activate(licenseKey: trimmed, instanceName: instanceName)
-            // The response lists every instance currently on this license, not just the one we
-            // just created — pick ours out by the name we sent.
+            // Creem activation returns the instance it just created. The Worker may also expand
+            // responses for compatibility, so still prefer the exact name we sent.
             let activatedInstance = response.instances.last(where: { $0.name == instanceName })
                 ?? (response.instances.count == 1 ? response.instances.first : nil)
             guard let instanceId = activatedInstance?.id else {

@@ -4,11 +4,11 @@ import Foundation
 /// seller API key stays server-side and can be rotated without releasing a new app build.
 ///
 /// Endpoint paths, request bodies, response shape, and error status codes below are confirmed
-/// against docs.creem.io (not guessed). Two things remain genuinely unconfirmed without a live
-/// account: (1) whether `instance` in the response is always an array (per one doc page's
-/// example) or sometimes a single nullable object (per another page's OpenAPI schema) — handled
-/// defensively below by decoding either shape; (2) the exact wording Creem uses for other 4xx/5xx
-/// error bodies beyond the documented cases.
+/// against docs.creem.io. Creem returns the one instance involved in an activate/validate request;
+/// PiPanel's Worker deliberately expands successful validation responses to an array containing
+/// every tracked active instance so device management can show the same devices counted by
+/// `activation`. Decoding both shapes keeps activation responses and older Worker deployments
+/// compatible.
 enum CreemClient {
     enum ClientError: Error {
         case invalidLicenseKey
@@ -46,8 +46,8 @@ enum CreemClient {
             activation = try container.decode(Int.self, forKey: .activation)
             activationLimit = try container.decodeIfPresent(Int.self, forKey: .activationLimit)
 
-            // Creem's docs disagree with themselves on whether `instance` is an array or a
-            // single nullable object — accept either.
+            // Creem returns a single object; PiPanel's validation proxy expands it to an array.
+            // Accept both so activation and validation share one model.
             if let array = try? container.decode([Instance].self, forKey: .instance) {
                 instances = array
             } else if let single = try? container.decode(Instance.self, forKey: .instance) {
