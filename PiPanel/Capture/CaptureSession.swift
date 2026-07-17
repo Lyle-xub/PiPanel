@@ -13,6 +13,14 @@ enum CaptureSessionError: Error {
     case virtualDisplayNotVisibleToScreenCaptureKit
 }
 
+/// Lightweight WindowServer record used to detect an application replacing its launcher/start
+/// window with a newly-created document or editor window while the PiP session is already live.
+struct SourceWindowSnapshot: Equatable {
+    let id: CGWindowID
+    let title: String?
+    let frame: CGRect
+}
+
 /// Owns one PiP capture session: leases a private virtual display from VirtualDisplayPool,
 /// relocates the source window onto it via Accessibility, and streams that display via
 /// ScreenCaptureKit. The display normally outlives this session and is returned to the pool.
@@ -59,6 +67,20 @@ final class CaptureSession: NSObject {
     private(set) var virtualDisplayHost: VirtualDisplayHost?
     private(set) var originalFrame: CGRect?
     private(set) var axWindow: AXUIElement?
+    /// Unlike windowInfo, which identifies the window the user originally selected, these track
+    /// the live window currently owned by the session. Word, CapCut/Jianying, and similar apps
+    /// replace a launcher window with a different CGWindow/AXWindow when a document is created.
+    private var currentSourceWindowID: CGWindowID
+    private var currentSourceWindowTitle: String
+    /// Window IDs already visible when this session started (plus every window subsequently
+    /// adopted). A newly-visible physical-screen window from the same PID is only eligible for
+    /// handoff when its ID is genuinely new, preventing another document that was already open
+    /// before PiP from being stolen by this session.
+    private var knownSourceAppWindowIDs: Set<CGWindowID> = []
+    private var isAdoptingReplacementWindow = false
+    /// Supplies the other active sessions when a replacement window forces this virtual display
+    /// to grow. The same topology repair used during initial startup must also protect siblings.
+    var siblingSessionsProvider: (() -> [CaptureSession])?
     private(set) var framedRect: CGRect = .zero
     private(set) var presentationState: PresentationState = .starting
     /// The size the window should be placed at on the virtual display — starts equal to
@@ -306,6 +328,8 @@ final class CaptureSession: NSObject {
     init(windowInfo: WindowInfo, framePresenter: LatestVideoFramePresenter) {
         self.windowInfo = windowInfo
         self.framePresenter = framePresenter
+        currentSourceWindowID = windowInfo.id
+        currentSourceWindowTitle = windowInfo.title
     }
 
     /// Empty space reserved on the virtual display around the window on the left/right/bottom
@@ -445,6 +469,10 @@ final class CaptureSession: NSObject {
         let originalFrame = AXWindowLocator.frame(of: axWindow) ?? windowInfo.frame
         self.originalFrame = originalFrame
         currentPiPSize = originalFrame.size
+        knownSourceAppWindowIDs = Set(
+            Self.onScreenSourceWindowSnapshots(ownerPID: windowInfo.ownerPID).map(\.id)
+        )
+        knownSourceAppWindowIDs.insert(windowInfo.id)
 
         // Leased from the application-level pool at whatever SettingsStore.virtualDisplayLongEdge
         // currently is. The lower-resource default remains larger than a typical PiP source and
@@ -518,6 +546,7 @@ final class CaptureSession: NSObject {
             axWindow: axWindow,
             siblingSessions: siblingSessions
         )
+        refreshCurrentSourceWindowIdentity(using: axWindow)
 
         let shareable = try await Self.waitForShareableDisplay(matching: host.displayID)
 
@@ -565,7 +594,7 @@ final class CaptureSession: NSObject {
         self.stream = stream
         presentationState = .pip
         observeScreenParameterChanges()
-        startFrameWatch(axWindow: axWindow, host: host)
+        startFrameWatch(host: host)
         startStallWatchdog()
         // panel.maxSize is created before this host exists and can only use the raw slider pixel
         // value. Now that the display has registered and its pixel→point scale is calibrated,
@@ -736,11 +765,11 @@ final class CaptureSession: NSObject {
     /// the session is presenting in PiP, and pushing an updated crop whenever the window's live
     /// frame actually differs from what's currently framed, keeps that from ever going stale
     /// instead of only checking once at the start.
-    private func startFrameWatch(axWindow: AXUIElement, host: VirtualDisplayHost) {
+    private func startFrameWatch(host: VirtualDisplayHost) {
         guard !isStopping else { return }
         frameWatchTimer?.invalidate()
         let timer = Timer(timeInterval: 0.5, repeats: true) { [weak self] _ in
-            self?.refreshFramedRectIfNeeded(axWindow: axWindow, host: host)
+            self?.refreshFramedRectIfNeeded(host: host)
         }
         RunLoop.main.add(timer, forMode: .common)
         frameWatchTimer = timer
@@ -751,12 +780,21 @@ final class CaptureSession: NSObject {
         frameWatchTimer = nil
     }
 
-    private func refreshFramedRectIfNeeded(axWindow: AXUIElement, host: VirtualDisplayHost) {
+    private func refreshFramedRectIfNeeded(host: VirtualDisplayHost) {
         // A screen-change notification stops this timer immediately, but an already-enqueued timer
         // callback may still arrive. Never turn a transient topology position into a live stream
         // crop while the stabilized re-anchor is pending — that exact update is what let another
         // session's source window appear inside an older PiP in the trace.
-        guard presentationState == .pip, !isReanchoring, !isStopping else { return }
+        guard presentationState == .pip, !isReanchoring, !isStopping,
+              !isAdoptingReplacementWindow else { return }
+
+        // Launcher-style apps often create the real document/editor as a brand-new window on a
+        // physical display, then close or hide the launcher parked on this virtual display. Scan
+        // before reading the cached AX element so handoff also works during the short overlap in
+        // which both old and new elements still exist.
+        if beginReplacementWindowAdoptionIfNeeded(host: host) { return }
+
+        guard let axWindow else { return }
         guard let current = AXWindowLocator.frame(of: axWindow) else { return }
         let fillsDisplay = AXWindowLocator.isFullScreen(axWindow)
             || Self.isFullVirtualDisplayFrame(
@@ -797,6 +835,188 @@ final class CaptureSession: NSObject {
         Task { try? await applyConfiguration() }
     }
 
+    /// Selects the frontmost same-process window that either reuses the current CGWindowID after
+    /// moving itself back to a physical display, or has a genuinely new ID that was not present
+    /// when PiP began. Snapshots are already ordered front-to-back by CGWindowList.
+    static func replacementWindowCandidate(
+        snapshots: [SourceWindowSnapshot],
+        currentWindowID: CGWindowID,
+        knownWindowIDs: Set<CGWindowID>,
+        physicalDisplayFrames: [CGRect]
+    ) -> SourceWindowSnapshot? {
+        snapshots.first { snapshot in
+            guard snapshot.id == currentWindowID || !knownWindowIDs.contains(snapshot.id) else {
+                return false
+            }
+            let center = CGPoint(x: snapshot.frame.midX, y: snapshot.frame.midY)
+            return physicalDisplayFrames.contains { displayFrame in
+                displayFrame.contains(center)
+            }
+        }
+    }
+
+    private static func onScreenSourceWindowSnapshots(ownerPID: pid_t) -> [SourceWindowSnapshot] {
+        guard let rawWindows = CGWindowListCopyWindowInfo(
+            [.optionOnScreenOnly, .excludeDesktopElements],
+            kCGNullWindowID
+        ) as? [[String: Any]] else { return [] }
+
+        return rawWindows.compactMap { info in
+            guard (info[kCGWindowLayer as String] as? NSNumber)?.intValue == 0,
+                  (info[kCGWindowOwnerPID as String] as? NSNumber)?.int32Value == ownerPID,
+                  ((info[kCGWindowAlpha as String] as? NSNumber)?.doubleValue ?? 1) > 0.01,
+                  let id = (info[kCGWindowNumber as String] as? NSNumber)?.uint32Value,
+                  let bounds = info[kCGWindowBounds as String] as? NSDictionary,
+                  let frame = CGRect(dictionaryRepresentation: bounds),
+                  frame.width > 60, frame.height > 60 else { return nil }
+            return SourceWindowSnapshot(
+                id: CGWindowID(id),
+                title: info[kCGWindowName as String] as? String,
+                frame: frame
+            )
+        }
+    }
+
+    private static func physicalDisplayFrames() -> [CGRect] {
+        let managedDisplayIDs = VirtualDisplayHost.activeDisplayIDs
+        return NSScreen.screens.compactMap { screen -> CGRect? in
+            guard let number = screen.deviceDescription[
+                NSDeviceDescriptionKey("NSScreenNumber")
+            ] as? NSNumber else { return nil }
+            let displayID = CGDirectDisplayID(number.uint32Value)
+            guard !managedDisplayIDs.contains(displayID) else { return nil }
+            let bounds = CGDisplayBounds(displayID)
+            return bounds.width > 0 && bounds.height > 0 ? bounds : nil
+        }
+    }
+
+    @discardableResult
+    private func beginReplacementWindowAdoptionIfNeeded(host: VirtualDisplayHost) -> Bool {
+        let snapshots = Self.onScreenSourceWindowSnapshots(ownerPID: windowInfo.ownerPID)
+        guard let candidate = Self.replacementWindowCandidate(
+            snapshots: snapshots,
+            currentWindowID: currentSourceWindowID,
+            knownWindowIDs: knownSourceAppWindowIDs,
+            physicalDisplayFrames: Self.physicalDisplayFrames()
+        ),
+        let replacementAXWindow = AXWindowLocator.locate(
+            ownerPID: windowInfo.ownerPID,
+            approximateFrame: candidate.frame,
+            title: candidate.title
+        ),
+        !AXWindowLocator.isMinimized(replacementAXWindow),
+        let replacementPhysicalFrame = AXWindowLocator.frame(of: replacementAXWindow) else {
+            return false
+        }
+
+        isAdoptingReplacementWindow = true
+        stopFrameWatch()
+        Task { [weak self] in
+            guard let self else { return }
+            await VirtualDisplayCoordinator.shared.lock()
+            guard !self.isStopping, self.presentationState == .pip,
+                  self.virtualDisplayHost === host else {
+                await VirtualDisplayCoordinator.shared.unlock()
+                self.isAdoptingReplacementWindow = false
+                return
+            }
+
+            let replacedWindowID = self.currentSourceWindowID
+            self.currentSourceWindowID = candidate.id
+            self.currentSourceWindowTitle = candidate.title
+                ?? AXWindowLocator.title(of: replacementAXWindow)
+                ?? self.windowInfo.ownerAppName
+            self.knownSourceAppWindowIDs.insert(candidate.id)
+            self.originalFrame = replacementPhysicalFrame
+            self.axWindow = replacementAXWindow
+            self.currentPiPSize = replacementPhysicalFrame.size
+            self.resetSourceSizingStateForReplacement()
+
+            debugTrace(
+                "source handoff: adopting windowID=\(candidate.id) "
+                + "title=\(self.currentSourceWindowTitle) physicalFrame=\(replacementPhysicalFrame) "
+                + "replacingWindowID=\(replacedWindowID)"
+            )
+
+            do {
+                try await self.moveWindowOntoVirtualDisplay(
+                    host: host,
+                    axWindow: replacementAXWindow,
+                    size: replacementPhysicalFrame.size
+                )
+                let siblings = self.siblingSessionsProvider?() ?? []
+                try await self.expandVirtualDisplayToFitSourceIfNeeded(
+                    host: host,
+                    axWindow: replacementAXWindow,
+                    siblingSessions: siblings
+                )
+                self.refreshCurrentSourceWindowIdentity(using: replacementAXWindow)
+                try await self.applyConfiguration()
+                debugTrace(
+                    "source handoff: completed windowID=\(self.currentSourceWindowID) "
+                    + "virtualFrame=\(AXWindowLocator.frame(of: replacementAXWindow) ?? .zero)"
+                )
+            } catch {
+                PiPanelLogger.capture.error(
+                    "Failed to adopt replacement window \(candidate.id): \(error.localizedDescription)"
+                )
+                debugTrace("source handoff: failed windowID=\(candidate.id) error=\(error)")
+            }
+
+            await VirtualDisplayCoordinator.shared.unlock()
+            self.isAdoptingReplacementWindow = false
+            if !self.isStopping, self.presentationState == .pip,
+               self.virtualDisplayHost === host {
+                self.startFrameWatch(host: host)
+            }
+        }
+        return true
+    }
+
+    private func resetSourceSizingStateForReplacement() {
+        panelToSourceScale = nil
+        pendingResizeSize = nil
+        discoveredMinWidth = nil
+        discoveredMinHeight = nil
+        discoveredMaxWidth = nil
+        discoveredMaxHeight = nil
+        suspectedMinWidth = nil
+        suspectedMinHeight = nil
+        suspectedMaxWidth = nil
+        suspectedMaxHeight = nil
+        suspectedMinWidthStreak = 0
+        suspectedMinHeightStreak = 0
+        suspectedMaxWidthStreak = 0
+        suspectedMaxHeightStreak = 0
+        previousTargetSize = .zero
+        onSourceMinSizeDiscovered?(.zero)
+        onSourceMaxSizeDiscovered?(
+            CGSize(width: CGFloat.infinity, height: CGFloat.infinity)
+        )
+    }
+
+    private func refreshCurrentSourceWindowIdentity(using axWindow: AXUIElement) {
+        guard let liveFrame = AXWindowLocator.frame(of: axWindow) else { return }
+        let snapshots = Self.onScreenSourceWindowSnapshots(ownerPID: windowInfo.ownerPID)
+        guard let best = snapshots.min(by: {
+            Self.windowFrameDistance($0.frame, liveFrame)
+                < Self.windowFrameDistance($1.frame, liveFrame)
+        }), Self.windowFrameDistance(best.frame, liveFrame) < 40 else { return }
+        currentSourceWindowID = best.id
+        knownSourceAppWindowIDs.insert(best.id)
+        if let title = best.title,
+           !title.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+            currentSourceWindowTitle = title
+        }
+    }
+
+    private static func windowFrameDistance(_ lhs: CGRect, _ rhs: CGRect) -> CGFloat {
+        abs(lhs.origin.x - rhs.origin.x)
+            + abs(lhs.origin.y - rhs.origin.y)
+            + abs(lhs.width - rhs.width)
+            + abs(lhs.height - rhs.height)
+    }
+
     /// Any real display-topology change (an overflow host being created/discarded, a virtual mode
     /// resize, a physical monitor change, or app shutdown) can make macOS reflow the global desktop
     /// arrangement. VirtualDisplayHost.bounds already reads that shift live,
@@ -824,7 +1044,7 @@ final class CaptureSession: NSObject {
     }
 
     private func reanchorAfterDisplayReconfiguration() {
-        guard presentationState == .pip, !isStopping,
+        guard presentationState == .pip, !isStopping, !isAdoptingReplacementWindow,
               let host = virtualDisplayHost, let axWindow else { return }
 
         // Freeze the last known-good crop before doing anything asynchronous. Creating a sibling
@@ -880,7 +1100,7 @@ final class CaptureSession: NSObject {
 
             if !self.isStopping, self.presentationState == .pip,
                self.virtualDisplayHost === host {
-                self.startFrameWatch(axWindow: axWindow, host: host)
+                self.startFrameWatch(host: host)
             }
         }
     }
@@ -918,7 +1138,7 @@ final class CaptureSession: NSObject {
         reanchorTaskGeneration &+= 1
         isReanchoring = false
         if !isStopping, presentationState == .pip, virtualDisplayHost === host {
-            startFrameWatch(axWindow: axWindow, host: host)
+            startFrameWatch(host: host)
         }
         debugTrace("vdisplay: sibling barrier reanchor end windowID=\(windowInfo.id) displayID=\(host.displayID) liveFrame=\(AXWindowLocator.frame(of: axWindow) ?? .zero) displayBounds=\(host.bounds)")
     }
@@ -952,7 +1172,7 @@ final class CaptureSession: NSObject {
                 try await stream.updateConfiguration(config)
             }
             presentationState = .pip
-            startFrameWatch(axWindow: axWindow, host: host)
+            startFrameWatch(host: host)
         } catch {
             PiPanelLogger.capture.error("Failed to resume PiP for window \(self.windowInfo.id): \(error)")
         }
@@ -1066,6 +1286,7 @@ final class CaptureSession: NSObject {
     /// lagging behind the panel until both dimensions happened to clear it at once.
     private func applyPanelResize(to panelSize: CGSize) async {
         guard presentationState == .pip, !isReanchoring, !isStopping,
+              !isAdoptingReplacementWindow,
               !isSourceNativeFullScreen,
               let axWindow, let host = virtualDisplayHost,
               framedRect.width > 0, framedRect.height > 0 else {
@@ -1546,20 +1767,25 @@ final class CaptureSession: NSObject {
             await Self.waitForDisplayRemoval(removedDisplayID)
         }
         await VirtualDisplayCoordinator.shared.unlock()
-        PiPanelLogger.capture.info("Capture stopped for window \(self.windowInfo.id)")
+        PiPanelLogger.capture.info("Capture stopped for window \(self.currentSourceWindowID)")
     }
 
     /// Moves the source window back to its pre-session position — used both on session stop and
     /// by enterSourceActiveState() (M3), so it reappears on the user's real screen.
     func restoreWindowIfNeeded() {
         guard let originalFrame else { return }
-        guard !sourceOccupiesFullVirtualDisplay(),
-              let liveFrame = AXWindowLocator.currentFrame(ofWindowID: windowInfo.id),
-              let liveWindow = AXWindowLocator.locate(
+        guard !sourceOccupiesFullVirtualDisplay() else {
+            Task { [weak self] in _ = await self?.restoreWindowOntoPhysicalDisplay() }
+            return
+        }
+        let liveWindow = AXWindowLocator.currentFrame(ofWindowID: currentSourceWindowID).flatMap {
+            AXWindowLocator.locate(
                 ownerPID: windowInfo.ownerPID,
-                approximateFrame: liveFrame,
-                title: windowInfo.title
-              ) else {
+                approximateFrame: $0,
+                title: currentSourceWindowTitle
+            )
+        } ?? axWindow
+        guard let liveWindow, AXWindowLocator.frame(of: liveWindow) != nil else {
             Task { [weak self] in _ = await self?.restoreWindowOntoPhysicalDisplay() }
             return
         }
@@ -1588,7 +1814,7 @@ final class CaptureSession: NSObject {
         for window in fullscreenWindows {
             let result = AXWindowLocator.setFullScreen(false, on: window)
             debugTrace(
-                "fullscreen: stop requested exit windowID=\(windowInfo.id) axError=\(result.rawValue) "
+                "fullscreen: stop requested exit windowID=\(currentSourceWindowID) axError=\(result.rawValue) "
                 + "candidateFrame=\(AXWindowLocator.frame(of: window) ?? .zero)"
             )
         }
@@ -1601,14 +1827,14 @@ final class CaptureSession: NSObject {
         var lastReadableFrame: CGRect?
         var previousPhysicalFrame: CGRect?
         for attempt in 0..<60 {
-            let serverFrame = AXWindowLocator.currentFrame(ofWindowID: windowInfo.id)
+            let serverFrame = AXWindowLocator.currentFrame(ofWindowID: currentSourceWindowID)
             let liveWindow = serverFrame.flatMap {
                 AXWindowLocator.locate(
                     ownerPID: windowInfo.ownerPID,
                     approximateFrame: $0,
-                    title: windowInfo.title
+                    title: currentSourceWindowTitle
                 )
-            }
+            } ?? cachedWindow.flatMap { AXWindowLocator.frame(of: $0) != nil ? $0 : nil }
 
             if let liveWindow {
                 axWindow = liveWindow
@@ -1625,7 +1851,7 @@ final class CaptureSession: NSObject {
                 AXWindowLocator.setFrame(originalFrame, on: cachedWindow)
             }
             try? await Task.sleep(nanoseconds: 100_000_000)
-            guard let current = AXWindowLocator.currentFrame(ofWindowID: windowInfo.id)
+            guard let current = AXWindowLocator.currentFrame(ofWindowID: currentSourceWindowID)
                     ?? liveWindow.flatMap({ AXWindowLocator.frame(of: $0) }) else { continue }
             lastReadableFrame = current
 
@@ -1640,7 +1866,7 @@ final class CaptureSession: NSObject {
             if Self.isApproximatelyEqual(current, originalFrame)
                 || previousPhysicalFrame.map({ Self.isApproximatelyEqual($0, current) }) == true {
                 debugTrace(
-                    "fullscreen: restored source windowID=\(windowInfo.id) "
+                    "fullscreen: restored source windowID=\(currentSourceWindowID) "
                     + "target=\(originalFrame) settled=\(current) attempts=\(attempt + 1)"
                 )
                 return current
@@ -1650,7 +1876,7 @@ final class CaptureSession: NSObject {
 
         let settled = lastReadableFrame
         debugTrace(
-            "fullscreen: restore timed out windowID=\(windowInfo.id) target=\(originalFrame) "
+            "fullscreen: restore timed out windowID=\(currentSourceWindowID) target=\(originalFrame) "
             + "lastReadable=\(settled ?? .zero)"
         )
         return settled

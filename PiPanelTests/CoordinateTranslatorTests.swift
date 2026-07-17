@@ -902,6 +902,92 @@ final class WindowCandidateTitleTests: XCTestCase {
     }
 }
 
+final class SourceWindowReplacementTests: XCTestCase {
+    private let physicalDisplay = CGRect(x: 0, y: 0, width: 1920, height: 1080)
+    private let virtualDisplay = CGRect(x: 1920, y: 0, width: 1280, height: 800)
+
+    func testNewDocumentWindowOnPhysicalDisplayIsAdopted() {
+        let launcherID: CGWindowID = 10
+        let document = SourceWindowSnapshot(
+            id: 20,
+            title: "Document 1",
+            frame: CGRect(x: 200, y: 120, width: 1100, height: 760)
+        )
+
+        let candidate = CaptureSession.replacementWindowCandidate(
+            snapshots: [
+                SourceWindowSnapshot(
+                    id: launcherID,
+                    title: nil,
+                    frame: CGRect(x: 1960, y: 44, width: 900, height: 600)
+                ),
+                document,
+            ],
+            currentWindowID: launcherID,
+            knownWindowIDs: [launcherID],
+            physicalDisplayFrames: [physicalDisplay]
+        )
+
+        XCTAssertEqual(candidate, document)
+    }
+
+    func testPreexistingSecondDocumentIsNotStolen() {
+        let launcherID: CGWindowID = 10
+        let existingDocumentID: CGWindowID = 20
+
+        let candidate = CaptureSession.replacementWindowCandidate(
+            snapshots: [
+                SourceWindowSnapshot(
+                    id: existingDocumentID,
+                    title: "Already Open",
+                    frame: CGRect(x: 200, y: 120, width: 1100, height: 760)
+                ),
+            ],
+            currentWindowID: launcherID,
+            knownWindowIDs: [launcherID, existingDocumentID],
+            physicalDisplayFrames: [physicalDisplay]
+        )
+
+        XCTAssertNil(candidate)
+    }
+
+    func testSameWindowIDReturningToPhysicalDisplayIsReadopted() {
+        let launcherID: CGWindowID = 10
+        let reusedWindow = SourceWindowSnapshot(
+            id: launcherID,
+            title: "New Project",
+            frame: CGRect(x: 300, y: 160, width: 1200, height: 760)
+        )
+
+        let candidate = CaptureSession.replacementWindowCandidate(
+            snapshots: [reusedWindow],
+            currentWindowID: launcherID,
+            knownWindowIDs: [launcherID],
+            physicalDisplayFrames: [physicalDisplay]
+        )
+
+        XCTAssertEqual(candidate, reusedWindow)
+    }
+
+    func testNewWindowAlreadyOnVirtualDisplayIsIgnored() {
+        let launcherID: CGWindowID = 10
+        let editorOnVirtualDisplay = SourceWindowSnapshot(
+            id: 20,
+            title: "Editor",
+            frame: CGRect(x: virtualDisplay.minX + 40, y: 44, width: 1000, height: 650)
+        )
+
+        let candidate = CaptureSession.replacementWindowCandidate(
+            snapshots: [editorOnVirtualDisplay],
+            currentWindowID: launcherID,
+            knownWindowIDs: [launcherID],
+            physicalDisplayFrames: [physicalDisplay]
+        )
+
+        XCTAssertNil(candidate)
+    }
+}
+
 final class VideoPlaybackDetectionTests: XCTestCase {
     func testBrowserMediaSessionMatchesOnlyItsTitledWindow() {
         var info = NowPlayingInfo()

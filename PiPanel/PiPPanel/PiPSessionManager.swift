@@ -563,6 +563,12 @@ final class PiPSessionManager: NSObject, ObservableObject {
         let framePresenter = LatestVideoFramePresenter(panelController: panelController)
         let captureSession = CaptureSession(windowInfo: windowInfo, framePresenter: framePresenter)
         captureSession.delegate = self
+        captureSession.siblingSessionsProvider = { [weak self, weak captureSession] in
+            guard let self, let captureSession else { return [] }
+            return self.sessions
+                .map(\.captureSession)
+                .filter { $0 !== captureSession }
+        }
         captureSession.targetFPS = SettingsStore.shared.targetFPS
         captureSession.captureDisplayMaximumFPS = DisplayRefreshRate.maximumPhysicalFPS()
         captureSession.presentationDisplayMaximumFPS = DisplayRefreshRate.fps(for: sourceScreen)
