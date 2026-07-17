@@ -21,7 +21,7 @@ app_icon="$app_path/Contents/Resources/AppIcon.icns"
 # next build therefore looks like a different application to macOS and causes every existing
 # Keychain item and privacy permission to ask for authorization again. Never silently produce a
 # distributable package with that identity. `--adhoc` remains available for explicit local-only
-# smoke testing, while production packaging auto-selects an installed Developer ID certificate.
+# smoke testing, while production packaging requires an installed Developer ID certificate.
 if [[ "$identity" == "--adhoc" ]]; then
     identity="-"
 elif [[ -z "$identity" ]]; then
@@ -30,16 +30,17 @@ elif [[ -z "$identity" ]]; then
             | sed -n 's/.*"\(Developer ID Application:.*\)"/\1/p' \
             | head -n 1
     )"
-    if [[ -z "$identity" ]] && security find-identity -v -p codesigning \
-        | grep -F '"PiPanel Local Code Signing"' >/dev/null; then
-        identity="PiPanel Local Code Signing"
-        echo "Using local self-signed identity; this package cannot be notarized."
-    fi
 fi
 
 if [[ -z "$identity" ]]; then
-    echo "No Developer ID Application or PiPanel local signing identity is installed." >&2
-    echo "Install Developer ID, or run scripts/setup_local_signing_identity.sh once." >&2
+    echo "No Developer ID Application signing identity is installed." >&2
+    echo "Install a Developer ID Application certificate with its private key in Keychain." >&2
+    echo "For a local-only build, explicitly pass --adhoc." >&2
+    exit 78
+fi
+
+if [[ "$identity" != "-" && "$identity" != Developer\ ID\ Application:* ]]; then
+    echo "Release packaging requires a Developer ID Application identity." >&2
     echo "For a local-only build, explicitly pass --adhoc." >&2
     exit 78
 fi
