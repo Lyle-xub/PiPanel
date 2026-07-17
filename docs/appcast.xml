@@ -7,12 +7,12 @@
         <language>zh-cn</language>
         <item>
             <title>1.0.1</title>
-            <pubDate>Fri, 17 Jul 2026 13:07:54 +0800</pubDate>
+            <pubDate>Fri, 17 Jul 2026 14:42:55 +0800</pubDate>
             <link>https://pipanel.app/</link>
-            <sparkle:version>3</sparkle:version>
+            <sparkle:version>4</sparkle:version>
             <sparkle:shortVersionString>1.0.1</sparkle:shortVersionString>
             <sparkle:minimumSystemVersion>14.0</sparkle:minimumSystemVersion>
-            <enclosure url="https://github.com/Lyle-xub/PiPanel/releases/download/v1.0.1/PiPanel-1.0.1-macOS-universal.zip" length="14948420" type="application/octet-stream" sparkle:edSignature="BGwtJINWLmlRQkrWIahAPXK1f48SwubG0wBMXmSmD+6sgxOPf8fF4Q4BQLwgvct9u2kNjBITissVhyJkgVssCA=="/>
+            <enclosure url="https://github.com/Lyle-xub/PiPanel/releases/download/v1.0.1/PiPanel-1.0.1-macOS-universal.zip" length="14940188" type="application/octet-stream" sparkle:edSignature="iZh8j69a3IHVfmnn1KEQVLyNYN1CB1tar7IUil/GBl4xcpQK+382qEyX+XiHrs3S09rt7o5YPORA//sk/Hr0Cw=="/>
         </item>
     </channel>
 </rss>
