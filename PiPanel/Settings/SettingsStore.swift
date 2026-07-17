@@ -545,10 +545,10 @@ final class SettingsStore: ObservableObject {
     }
 
     /// Resets every user-facing app-local setting to `DefaultValues`, the same source used by a
-    /// clean first launch. Launch-at-login is reset by AboutSettingsView through its OS-backed
-    /// manager because it is not stored in UserDefaults.
+    /// clean first launch.
     ///
-    /// Deliberately leaves one thing untouched:
+    /// Deliberately leaves these things untouched:
+    ///  - launch-at-login: an OS-level preference managed independently by SMAppService
     ///  - hasCompletedWelcome: an internal onboarding flag, never exposed anywhere in the settings
     ///    UI — resetting it would just unexpectedly resurface the first-launch welcome window
     ///    rather than reset anything the user actually configured.

@@ -47,15 +47,4 @@ final class LaunchAtLoginManager: ObservableObject {
         refresh()
     }
 
-    /// Launch-at-login's product default is off. Avoid calling unregister() when no login item is
-    /// registered because ServiceManagement can report that harmless state as an error, which
-    /// would make a successful “restore all settings” operation look partially failed.
-    func resetToDefault() {
-        guard SMAppService.mainApp.status != .notRegistered else {
-            lastError = nil
-            refresh()
-            return
-        }
-        setEnabled(false)
-    }
 }

@@ -2,7 +2,6 @@ import SwiftUI
 
 struct AboutSettingsView: View {
     @State private var isShowingResetConfirmation = false
-    @State private var resetErrorMessage: String?
 
     private var appIcon: NSImage {
         NSImage(named: "AppIcon") ?? NSWorkspace.shared.icon(forFile: Bundle.main.bundlePath)
@@ -42,23 +41,10 @@ struct AboutSettingsView: View {
         ) {
             Button("恢复默认", role: .destructive) {
                 SettingsStore.shared.resetToDefaults()
-                LaunchAtLoginManager.shared.resetToDefault()
-                resetErrorMessage = LaunchAtLoginManager.shared.lastError
             }
             Button("取消", role: .cancel) {}
         } message: {
-            Text("开机启动、画面参数、自动化、快捷键和外观等可配置项都会恢复到初始值；支持实时更新的设置会立即应用到已打开的画中画")
-        }
-        .alert(
-            "部分设置未能恢复",
-            isPresented: Binding(
-                get: { resetErrorMessage != nil },
-                set: { if !$0 { resetErrorMessage = nil } }
-            )
-        ) {
-            Button("好", role: .cancel) {}
-        } message: {
-            Text(resetErrorMessage ?? "")
+            Text("画面参数、自动化、快捷键和外观等可配置项都会恢复到初始值；开机启动保持当前状态，支持实时更新的设置会立即应用到已打开的画中画")
         }
     }
 
