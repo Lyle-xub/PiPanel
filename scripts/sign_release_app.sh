@@ -50,7 +50,11 @@ elif [[ "$identity" == "PiPanel Local Code Signing" ]]; then
     # eligible for notarization and would add a needless network dependency.
     sign_args+=(--timestamp=none)
 else
-    sign_args+=(--options runtime --timestamp)
+    # codesign's automatic TSA discovery intermittently reports "The timestamp service is not
+    # available" even while Apple's endpoint is reachable. Pin the official Developer ID TSA so
+    # production signing remains deterministic; notarization still verifies the resulting secure
+    # timestamp in exactly the same way.
+    sign_args+=(--options runtime --timestamp=http://timestamp.apple.com/ts01)
 fi
 
 sign_target() {
