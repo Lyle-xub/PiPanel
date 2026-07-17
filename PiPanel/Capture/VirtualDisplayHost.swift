@@ -275,13 +275,11 @@ final class VirtualDisplayHost {
     /// cropping doesn't clip the window's own title bar against it.
     static let menuBarInset: CGFloat = 44
 
-    /// The display is created at a generous, fixed "biggest normal monitor" canvas by default
-    /// (CaptureSession.start() passes SettingsStore.virtualDisplayLongEdge-derived dimensions,
-    /// which default to this) rather than one sized to the captured window, so a later PiP-panel
-    /// resize (CaptureSession.resizeSourceWindow) always has room to grow the window into without
-    /// necessarily needing to change the display's own resolution mid-session. It *can* also be
-    /// changed live via resize(pixelWidth:pixelHeight:) below — see that method and `bounds`'s own
-    /// doc comments for why an earlier attempt at this looked broken and wasn't.
+    /// The descriptor keeps a generous, fixed "biggest normal monitor" ceiling while
+    /// CaptureSession.start() selects the lower SettingsStore virtual-display default. A later
+    /// PiP-panel resize can grow the live mode when the source window needs more room without
+    /// forcing every new session to pay the full-size default cost. It can also be changed live via
+    /// resize(pixelWidth:pixelHeight:) below — see that method and `bounds`'s own comments.
     /// SCStreamConfiguration.sourceRect already crops the capture down to just the window's own
     /// rect regardless of how big this canvas is (see makeConfiguration), so there's no meaningful
     /// capture-bandwidth cost to a generous ceiling.

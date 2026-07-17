@@ -116,8 +116,8 @@ final class SettingsStore: ObservableObject {
     /// different value after the user presses reset.
     enum DefaultValues {
         static let targetFPS = 15
-        static let virtualDisplayLongEdge = Double(VirtualDisplayHost.maxPixelsWide)
-        static let captureOutputLongEdge = 1280.0
+        static let virtualDisplayLongEdge = 1664.0
+        static let captureOutputLongEdge = 960.0
         static let autoReturnEnabled = false
         static let autoReturnIdleInterval = 1.5
         static let autoStackOnIdleEnabled = false
@@ -142,7 +142,7 @@ final class SettingsStore: ObservableObject {
         static let panelTitleEnabled = false
         static let panelOpacity = 1.0
         static let panelLyricsEnabled = true
-        static let panelCloseMethod = PiPCloseMethod.dragToZone
+        static let panelCloseMethod = PiPCloseMethod.cornerButton
         static let pipActivationMethod = PiPActivationMethod.cornerSwitch
         static let stackShortcut = GlobalShortcut(
             keyCode: 1,

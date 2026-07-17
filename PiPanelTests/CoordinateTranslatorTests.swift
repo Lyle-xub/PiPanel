@@ -62,6 +62,23 @@ final class PiPActivationMethodTests: XCTestCase {
 
 final class SettingsStoreTests: XCTestCase {
     @MainActor
+    func testNewInstallUsesLowerResourceDefaultsAndCornerCloseButton() {
+        let (defaults, suiteName) = makeIsolatedDefaults()
+        defer { defaults.removePersistentDomain(forName: suiteName) }
+
+        let settings = SettingsStore(userDefaults: defaults)
+
+        XCTAssertEqual(settings.virtualDisplayLongEdge, 1664)
+        let virtualDisplaySize = VirtualDisplayHost.pixelSize(
+            forLongEdge: settings.virtualDisplayLongEdge
+        )
+        XCTAssertEqual(virtualDisplaySize.width, 1664)
+        XCTAssertEqual(virtualDisplaySize.height, 1040)
+        XCTAssertEqual(settings.captureOutputLongEdge, 960)
+        XCTAssertEqual(settings.panelCloseMethod, .cornerButton)
+    }
+
+    @MainActor
     func testOriginalMinimumVirtualDisplayResolutionRemainsAvailable() {
         let (defaults, suiteName) = makeIsolatedDefaults()
         defer { defaults.removePersistentDomain(forName: suiteName) }
@@ -113,7 +130,7 @@ final class SettingsStoreTests: XCTestCase {
         settings.panelTitleEnabled = true
         settings.panelOpacity = 0.2
         settings.panelLyricsEnabled = false
-        settings.panelCloseMethod = .cornerButton
+        settings.panelCloseMethod = .dragToZone
         settings.pipActivationMethod = .shake
         settings.stackShortcut = nil
         settings.closeAllShortcut = nil

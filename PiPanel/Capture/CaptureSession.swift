@@ -446,12 +446,11 @@ final class CaptureSession: NSObject {
         self.originalFrame = originalFrame
         currentPiPSize = originalFrame.size
 
-        // Leased from the application-level pool at whatever virtualDisplayLongEdge currently is
-        // (SettingsStore.
-        // virtualDisplayLongEdge, defaulting to VirtualDisplayHost's maxPixelsWide/maxPixelsHigh
-        // ceiling) — generous rather than floored/sized to just the window's own size, so a later
-        // PiP-panel resize (resizeSourceWindow) has room to grow the window into without
-        // necessarily needing to change the display's own resolution mid-session. It also *can*
+        // Leased from the application-level pool at whatever SettingsStore.virtualDisplayLongEdge
+        // currently is. The lower-resource default remains larger than a typical PiP source and
+        // oversized apps can expand their own live mode automatically, so a later PiP-panel resize
+        // (resizeSourceWindow) can still grow without every session starting at the descriptor's
+        // full maxPixelsWide/maxPixelsHigh ceiling. The mode also *can*
         // change mid-session now, live, via virtualDisplayLongEdge's own didSet calling
         // VirtualDisplayHost.resize(pixelWidth:pixelHeight:) — see that method's doc comment for
         // how this was verified to actually work even against an actively-capturing SCStream, and
