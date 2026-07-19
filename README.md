@@ -1,5 +1,5 @@
 <div align="center">
-  <img src="docs/assets/icon-256.png" width="112" height="112" alt="PiPanel icon">
+  <img src="docs/assets/icon-256.png?v=1.0.3" width="112" height="112" alt="PiPanel icon">
 
   # PiPanel
 

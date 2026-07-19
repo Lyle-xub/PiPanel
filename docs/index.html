@@ -6,10 +6,10 @@
 <title>PiPanel — 让窗口，随心悬浮</title>
 <meta name="description" content="PiPanel 把正在运行的真实 macOS 窗口变成可移动、可缩放、可直接交互的画中画。点击、滚动和键盘输入都能实时作用于原窗口。">
 <meta name="theme-color" content="#3541ff">
-<link rel="icon" type="image/png" sizes="512x512" href="assets/icon-512.png">
-<link rel="icon" type="image/png" sizes="256x256" href="assets/icon-256.png">
-<link rel="icon" type="image/png" sizes="64x64" href="assets/icon-64.png">
-<link rel="apple-touch-icon" href="assets/icon-256.png">
+<link rel="icon" type="image/png" sizes="512x512" href="assets/icon-512.png?v=1.0.3">
+<link rel="icon" type="image/png" sizes="256x256" href="assets/icon-256.png?v=1.0.3">
+<link rel="icon" type="image/png" sizes="64x64" href="assets/icon-64.png?v=1.0.3">
+<link rel="apple-touch-icon" href="assets/icon-256.png?v=1.0.3">
 <style>
   :root{
     --ink:#17171b;
@@ -335,7 +335,7 @@
   .workflow-orbit{position:absolute;inset:18px;border:2px dashed rgba(23,23,27,.36);border-radius:50%;animation:spin 18s linear infinite}
   .workflow-orbit::before,.workflow-orbit::after{content:"";position:absolute;width:62px;height:45px;border:2px solid var(--ink);border-radius:10px;background:white}
   .workflow-orbit::before{left:-14px;top:45px}.workflow-orbit::after{right:-12px;bottom:30px;background:var(--blue)}
-  .workflow-core{position:absolute;width:100px;height:100px;left:50%;top:50%;transform:translate(-50%,-50%);border-radius:27px;background:white url("assets/icon-128.png") center/74px no-repeat;box-shadow:0 15px 28px rgba(29,29,60,.17)}
+  .workflow-core{position:absolute;width:100px;height:100px;left:50%;top:50%;transform:translate(-50%,-50%);border-radius:27px;background:white url("assets/icon-128.png?v=1.0.3") center/74px no-repeat;box-shadow:0 15px 28px rgba(29,29,60,.17)}
   @keyframes spin{to{transform:rotate(360deg)}}
 
   /* how */
@@ -447,7 +447,7 @@
   <nav>
     <div class="shell nav-inner">
       <a class="brand" href="#" aria-label="PiPanel 首页">
-        <img src="assets/icon-128.png" alt="" width="34" height="34">
+        <img src="assets/icon-128.png?v=1.0.3" alt="" width="34" height="34">
         <span>PiPanel</span>
       </a>
       <div class="nav-links">
@@ -700,7 +700,7 @@
 <footer>
   <div class="shell footer-grid">
     <div>
-      <div class="footer-brand"><img src="assets/icon-128.png" alt="" width="38" height="38">PiPanel</div>
+      <div class="footer-brand"><img src="assets/icon-128.png?v=1.0.3" alt="" width="38" height="38">PiPanel</div>
       <p class="footer-copy">由 lylexub 独立开发 · support@pipanel.app · © 2026</p>
     </div>
     <div class="footer-links">
