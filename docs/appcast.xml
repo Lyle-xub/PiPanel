@@ -24,7 +24,7 @@
                     <li>优化边缘交互反馈、缩放光标、关闭按钮悬停效果，并更新应用图标。</li>
                 </ul>
             ]]></description>
-            <enclosure url="https://github.com/Lyle-xub/PiPanel/releases/download/v1.0.3/PiPanel-1.0.3-macOS-universal.zip" length="15133681" type="application/octet-stream" sparkle:edSignature="XXM+27Y5tVG2l3FwSuJTjOVjuCH3WRDBOHt6JZiA76IDrynu2aX284dELcDm3Hd+hSGHjUcbTAHu0chi/8dHCQ=="/>
+            <enclosure url="https://github.com/Lyle-xub/PiPanel/releases/download/v1.0.3/PiPanel-1.0.3-macOS-universal.zip" length="15133681" type="application/octet-stream" sparkle:edSignature="/BSXkCBTZqu95QzH8OaX6eHV9gGbnGbUEvcd5gQEAFLGXua8GyqgLejbnTDutlBzHYZQgUX3OXJ9M0czql82Bw=="/>
         </item>
     </channel>
 </rss>
