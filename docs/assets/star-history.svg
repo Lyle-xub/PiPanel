@@ -1,6 +1,6 @@
 <svg xmlns="http://www.w3.org/2000/svg" width="800" height="533" viewBox="0 0 800 533" role="img" aria-labelledby="title desc" style="background:#fff">
   <title id="title">Lyle-xub/PiPanel Star growth</title>
-  <desc id="desc">46 GitHub stars as of 2026-07-21</desc>
+  <desc id="desc">46 GitHub stars as of 2026-07-22</desc>
   <defs>
     <filter id="xkcdify" x="-4%" y="-4%" width="108%" height="108%">
       <feTurbulence type="fractalNoise" baseFrequency="0.025" numOctaves="2" seed="11" result="noise" />
@@ -21,9 +21,9 @@
   <text x="101" y="72" font-size="15">Lyle-xub/PiPanel</text>
   <path d="M 72 96 L 72 437 L 772 437" class="axis-line" filter="url(#xkcdify)" />
   <line x1="67" y1="437.0" x2="72" y2="437.0" class="tick-mark" /><text x="60" y="442.0" text-anchor="end" class="tick-label"></text><line x1="67" y1="368.8" x2="72" y2="368.8" class="tick-mark" /><text x="60" y="373.8" text-anchor="end" class="tick-label">10</text><line x1="67" y1="300.6" x2="72" y2="300.6" class="tick-mark" /><text x="60" y="305.6" text-anchor="end" class="tick-label">20</text><line x1="67" y1="232.4" x2="72" y2="232.4" class="tick-mark" /><text x="60" y="237.4" text-anchor="end" class="tick-label">30</text><line x1="67" y1="164.2" x2="72" y2="164.2" class="tick-mark" /><text x="60" y="169.2" text-anchor="end" class="tick-label">40</text><line x1="67" y1="96.0" x2="72" y2="96.0" class="tick-mark" /><text x="60" y="101.0" text-anchor="end" class="tick-label">50</text>
-  <line x1="72.0" y1="437" x2="72.0" y2="442" class="tick-mark" /><text x="72.0" y="464" text-anchor="middle" class="tick-label">Jul 12</text><line x1="227.6" y1="437" x2="227.6" y2="442" class="tick-mark" /><text x="227.6" y="464" text-anchor="middle" class="tick-label">Jul 14</text><line x1="383.1" y1="437" x2="383.1" y2="442" class="tick-mark" /><text x="383.1" y="464" text-anchor="middle" class="tick-label">Jul 16</text><line x1="460.9" y1="437" x2="460.9" y2="442" class="tick-mark" /><text x="460.9" y="464" text-anchor="middle" class="tick-label">Jul 17</text><line x1="616.4" y1="437" x2="616.4" y2="442" class="tick-mark" /><text x="616.4" y="464" text-anchor="middle" class="tick-label">Jul 19</text><line x1="772.0" y1="437" x2="772.0" y2="442" class="tick-mark" /><text x="772.0" y="464" text-anchor="middle" class="tick-label">Jul 21</text>
-  <path d="M 72.0 437.0 L 227.6 437.0 L 305.3 437.0 L 383.1 437.0 L 460.9 307.4 L 538.7 171.0 L 616.4 157.4 L 694.2 123.3 L 772.0 123.3" fill="none" stroke="#dd4528" stroke-width="3" stroke-linejoin="round" stroke-linecap="round" filter="url(#xkcdify)" />
+  <line x1="72.0" y1="437" x2="72.0" y2="442" class="tick-mark" /><text x="72.0" y="464" text-anchor="middle" class="tick-label">Jul 12</text><line x1="212.0" y1="437" x2="212.0" y2="442" class="tick-mark" /><text x="212.0" y="464" text-anchor="middle" class="tick-label">Jul 14</text><line x1="352.0" y1="437" x2="352.0" y2="442" class="tick-mark" /><text x="352.0" y="464" text-anchor="middle" class="tick-label">Jul 16</text><line x1="492.0" y1="437" x2="492.0" y2="442" class="tick-mark" /><text x="492.0" y="464" text-anchor="middle" class="tick-label">Jul 18</text><line x1="632.0" y1="437" x2="632.0" y2="442" class="tick-mark" /><text x="632.0" y="464" text-anchor="middle" class="tick-label">Jul 20</text><line x1="772.0" y1="437" x2="772.0" y2="442" class="tick-mark" /><text x="772.0" y="464" text-anchor="middle" class="tick-label">Jul 22</text>
+  <path d="M 72.0 437.0 L 212.0 437.0 L 282.0 437.0 L 352.0 437.0 L 422.0 307.4 L 492.0 171.0 L 562.0 157.4 L 632.0 123.3 L 702.0 123.3 L 772.0 123.3" fill="none" stroke="#dd4528" stroke-width="3" stroke-linejoin="round" stroke-linecap="round" filter="url(#xkcdify)" />
   <text x="422.0" y="517" text-anchor="middle" class="axis-title">Date</text>
   <text x="18" y="266.5" text-anchor="middle" class="axis-title" transform="rotate(-90 18 266.5)">GitHub Stars</text>
-  <text x="772" y="519" text-anchor="end" font-size="11" fill="#999">Updated 2026-07-21</text>
+  <text x="772" y="519" text-anchor="end" font-size="11" fill="#999">Updated 2026-07-22</text>
 </svg>
