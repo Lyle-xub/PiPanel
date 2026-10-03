@@ -6,6 +6,28 @@
         <description>PiPanel 的稳定版自动更新</description>
         <language>zh-cn</language>
         <item>
+            <title>1.0.6</title>
+            <pubDate>Sat, 03 Oct 2026 14:21:41 +0800</pubDate>
+            <link>https://github.com/Lyle-xub/PiPanel/releases/tag/v1.0.6</link>
+            <sparkle:version>12</sparkle:version>
+            <sparkle:shortVersionString>1.0.6</sparkle:shortVersionString>
+            <sparkle:minimumSystemVersion>14.0</sparkle:minimumSystemVersion>
+            <description><![CDATA[
+                <h2>PiPanel 1.0.6</h2>
+                <p>优化画中画的资源占用、清晰度、鼠标交互和多窗口稳定性。</p>
+                <ul>
+                    <li>多个画中画共用一个虚拟显示器，减少显示器创建与桌面重排开销。</li>
+                    <li>鼠标保持在物理桌面，进入小窗后自动映射；改善首次点击需要点两次的问题。</li>
+                    <li>优化原生像素捕获与高清缩小显示，清晰度统一为高、中、低。</li>
+                    <li>修复微信图片、视频预览及弹窗误替换聊天小窗内容的问题。</li>
+                    <li>修复应用已有内置画中画时按钮识别错误、画面错位及显示不全的问题。</li>
+                    <li>改善原生全屏、附属悬浮窗口、多文档窗口与关闭小窗后的窗口恢复。</li>
+                </ul>
+                <p>140 项自动化测试通过；支持 Apple Silicon 和 Intel Mac，安装包已签名并通过 Apple 公证。</p>
+            ]]></description>
+            <enclosure url="https://github.com/Lyle-xub/PiPanel/releases/download/v1.0.6/PiPanel-1.0.6-macOS-universal.zip" length="15200855" type="application/octet-stream" sparkle:edSignature="sxdiJZ4isn+kNLFyGZ2wZHlfG+k8GTf3DrZV/OAXKKgG8KqevO0S15H7VAPVD14Gi+uuIqDCPLOxO9fWt9EbAA=="/>
+        </item>
+        <item>
             <title>1.0.5</title>
             <pubDate>Fri, 04 Sep 2026 21:27:37 +0800</pubDate>
             <link>https://github.com/Lyle-xub/PiPanel/releases/tag/v1.0.5</link>
